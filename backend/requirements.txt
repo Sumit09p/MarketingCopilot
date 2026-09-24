@@ -3,3 +3,6 @@ uvicorn[standard]
 pymongo
 python-dotenv
 pydantic-settings
+bcrypt
+PyJWT
+email-validator

@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     DATABASE_NAME: str = "marketingos"
 
     JWT_SECRET: SecretStr | None = None
+    JWT_EXPIRE_MINUTES: int = 60
 
     LLM_PROVIDER: str | None = None
     LLM_API_KEY: SecretStr | None = None

@@ -28,7 +28,7 @@ class TestMongoDB(unittest.TestCase):
         reset_settings_cache()
 
     def test_missing_mongodb_uri_raises_controlled_error(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {"MONGODB_URI": ""}, clear=True):
             reset_settings_cache()
 
             with self.assertRaises(DatabaseNotConfiguredError) as ctx:
