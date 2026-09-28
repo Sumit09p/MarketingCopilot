@@ -1,3 +1,6 @@
-from rag.retriever import SimpleKeywordRetriever
+from .retriever import RetrievedChunk, SemanticRetriever
 
-__all__ = ["SimpleKeywordRetriever"]
+__all__ = [
+    "RetrievedChunk",
+    "SemanticRetriever",
+]

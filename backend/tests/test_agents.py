@@ -11,9 +11,10 @@ if str(BACKEND) not in sys.path:
 from backend.agents.analytics_agent import AnalyticsAgent
 from backend.agents.competitor_agent import CompetitorAgent
 from backend.agents.content_agent import ContentAgent
+from backend.agents.recommendation_agent import RecommendationAgent
 from backend.agents.research_agent import ResearchAgent
 from backend.agents.seo_agent import SEOAgent
-from backend.rag.retriever import SimpleKeywordRetriever
+from backend.rag.retriever import SemanticRetriever
 
 
 CONTENT_OK = {
@@ -27,6 +28,84 @@ CONTENT_OK = {
         "Share a weekly habit-building story series.",
     ],
 }
+
+def test_recommendation_successful_generation():
+    payload = {
+        "recommendations": [
+            "Create beginner-focused content.",
+            "Test campus fitness partnerships.",
+            "Improve landing-page messaging.",
+        ],
+        "priority_actions": [
+            "Launch the beginner content series.",
+            "Test the highest-priority landing-page change.",
+        ],
+    }
+
+    agent = RecommendationAgent(lambda prompt: json.dumps(payload))
+
+    result = agent.run(
+        "recommendation_1",
+        {
+            "research": {
+                "summary": "Beginner audiences need simple educational content."
+            },
+            "competitor": {
+                "recommendations": ["Focus on beginner positioning."]
+            },
+            "seo": {
+                "recommendations": ["Create beginner-focused FAQ content."]
+            },
+            "content": {
+                "campaign_hook": "Start your fitness journey."
+            },
+            "analytics": {
+                "metrics": {
+                    "ctr": 10.0,
+                    "conversion_rate": 20.0,
+                }
+            },
+        },
+    )
+
+    assert result.status == "COMPLETED"
+    assert result.agent == "recommendation"
+    assert len(result.data["recommendations"]) == 3
+    assert len(result.data["priority_actions"]) == 2
+
+
+def test_recommendation_invalid_json():
+    agent = RecommendationAgent(lambda prompt: "not-json")
+
+    result = agent.run(
+        "recommendation_2",
+        {"research": {"summary": "Some research"}},
+    )
+
+    assert result.status == "FAILED"
+    assert "invalid JSON" in (result.error or "")
+
+
+def test_recommendation_wrong_count():
+    payload = {
+        "recommendations": [
+            "Only one recommendation"
+        ],
+        "priority_actions": [
+            "Action one",
+            "Action two",
+        ],
+    }
+
+    agent = RecommendationAgent(lambda prompt: json.dumps(payload))
+
+    result = agent.run(
+        "recommendation_3",
+        {"research": {"summary": "Some research"}},
+    )
+
+    assert result.status == "FAILED"
+    assert "3 recommendations" in (result.error or "")
 
 
 def test_content_successful_generation():
@@ -205,12 +284,85 @@ def test_analytics_metrics_and_zero_denominators():
     assert zero_metrics["roas"] is None
 
 
-def test_rag_add_and_retrieve_with_source():
-    retriever = SimpleKeywordRetriever()
-    retriever.add_document("brand-guidelines.txt", "Our brand voice is warm, simple, and student-friendly.")
-    retriever.add_document("pricing.txt", "Internal pricing notes for wholesale partners.")
-    results = retriever.retrieve("student brand voice", top_k=1)
-    assert results
-    assert results[0]["source"] == "brand-guidelines.txt"
-    assert "student-friendly" in results[0]["text"]
+def test_rag_semantic_retrieval():
+    retriever = SemanticRetriever(
+        chunk_size=10,
+        chunk_overlap=2,
+    )
+
+    text = (
+        "Our brand voice is warm, simple, friendly, and student-focused. "
+        "We communicate with students using clear and approachable language. "
+        "Our campaigns should remain helpful and easy to understand."
+    )
+
+    chunk_count = retriever.add_document(
+        "brand.txt",
+        text,
+    )
+
+    assert chunk_count == 4
+
+    results = retriever.retrieve(
+        "friendly student communication",
+        top_k=2,
+    )
+
+    assert len(results) == 2
+    assert results[0]["source"] == "brand.txt"
     assert results[0]["score"] > 0
+    assert results[0]["chunk_id"] >= 0
+
+
+def test_rag_empty_query():
+    retriever = SemanticRetriever()
+
+    retriever.add_document(
+        "brand.txt",
+        "Our brand voice is friendly and student-focused.",
+    )
+
+    results = retriever.retrieve("")
+
+    assert results == []
+
+
+def test_rag_invalid_document():
+    retriever = SemanticRetriever()
+
+    try:
+        retriever.add_document("", "Some document text.")
+        assert False
+    except ValueError:
+        assert True
+
+
+def test_rag_persistence(tmp_path):
+    retriever = SemanticRetriever(
+        chunk_size=10,
+        chunk_overlap=2,
+    )
+
+    retriever.add_document(
+        "brand.txt",
+        "Our brand voice is friendly and student-focused.",
+    )
+
+    storage_path = tmp_path / "rag_index"
+
+    retriever.save(storage_path)
+
+    loaded_retriever = SemanticRetriever(
+        chunk_size=10,
+        chunk_overlap=2,
+    )
+
+    loaded_retriever.load(storage_path)
+
+    results = loaded_retriever.retrieve(
+        "student friendly communication",
+        top_k=1,
+    )
+
+    assert len(results) == 1
+    assert results[0]["source"] == "brand.txt"
