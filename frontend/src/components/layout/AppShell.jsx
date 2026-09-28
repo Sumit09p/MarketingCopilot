@@ -22,7 +22,7 @@ export default function AppShell() {
       <Sidebar />
       <div className="shell-main">
         <Header title={title} />
-        <main className="content">
+        <main className={pathname === "/chat" ? "content content-chat" : "content"}>
           <Outlet />
         </main>
       </div>

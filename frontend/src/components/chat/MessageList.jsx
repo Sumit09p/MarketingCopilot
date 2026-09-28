@@ -1,10 +1,46 @@
 import MessageBubble from "./MessageBubble";
 
-export default function MessageList({ messages }) {
-  if (!messages.length) {
+const EXAMPLE_PROMPTS = [
+  "Create a social media campaign for my product",
+  "Research competitors in my industry",
+  "Find SEO keywords for my website",
+  "Create Instagram captions for my campaign",
+];
+
+export default function MessageList({
+  messages,
+  loading,
+  sending,
+  onExampleClick,
+}) {
+  if (loading) {
     return (
       <div className="message-list">
-        <p className="muted">Message list foundation. Full chat comes in a later module.</p>
+        <p className="muted">Loading messages...</p>
+      </div>
+    );
+  }
+
+  if (!messages.length && !sending) {
+    return (
+      <div className="message-list welcome-state">
+        <div className="welcome-copy">
+          <p className="welcome-kicker">MarketingOS AI</p>
+          <h2>How can I help with your marketing?</h2>
+          <p className="muted">Choose an example or type your own question. Examples fill the composer and do not send automatically.</p>
+        </div>
+        <div className="example-prompts">
+          {EXAMPLE_PROMPTS.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              className="example-prompt"
+              onClick={() => onExampleClick(prompt)}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -14,6 +50,12 @@ export default function MessageList({ messages }) {
       {messages.map((message) => (
         <MessageBubble key={message.id} role={message.role} content={message.content} />
       ))}
+      {sending ? (
+        <article className="message-bubble assistant typing" aria-live="polite">
+          <span className="message-role">MarketingOS AI</span>
+          <p className="message-content">MarketingOS AI is thinking...</p>
+        </article>
+      ) : null}
     </div>
   );
 }
