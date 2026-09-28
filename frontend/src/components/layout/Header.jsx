@@ -20,7 +20,7 @@ export default function Header({ title }) {
           <span className="header-user-name">{user?.name ?? "Guest"}</span>
           {user?.email ? <span className="header-user-email">{user.email}</span> : null}
         </div>
-        <button type="button" className="btn btn-secondary" onClick={handleLogout}>
+        <button type="button" className="btn btn-secondary" onClick={handleLogout} aria-label="Log out">
           Log out
         </button>
       </div>

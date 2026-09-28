@@ -82,9 +82,10 @@ export default function AnalyticsPage() {
           <DemoBanner sample={sample} />
 
           <div className="filter-bar">
-            <label className="form-field compact">
+            <label className="form-field compact" htmlFor="analytics-campaign">
               Campaign filter
               <select
+                id="analytics-campaign"
                 value={campaignId}
                 onChange={(event) => {
                   const next = event.target.value;
@@ -100,9 +101,9 @@ export default function AnalyticsPage() {
                 ))}
               </select>
             </label>
-            <label className="form-field compact">
+            <label className="form-field compact" htmlFor="analytics-metric">
               Chart metric
-              <select value={metric} onChange={(event) => setMetric(event.target.value)}>
+              <select id="analytics-metric" value={metric} onChange={(event) => setMetric(event.target.value)}>
                 <option value="traffic">Traffic</option>
                 <option value="engagement">Engagement</option>
                 <option value="conversions">Conversions</option>

@@ -11,6 +11,10 @@ const links = [
   { to: "/integrations", label: "Integrations" },
 ];
 
+function isPrefixNav(to) {
+  return to === "/campaigns";
+}
+
 export default function Sidebar() {
   return (
     <aside className="sidebar">
@@ -20,7 +24,12 @@ export default function Sidebar() {
       </div>
       <nav className="sidebar-nav" aria-label="Main">
         {links.map((link) => (
-          <NavLink key={link.to} to={link.to} className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}>
+          <NavLink
+            key={link.to}
+            to={link.to}
+            end={!isPrefixNav(link.to)}
+            className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
+          >
             {link.label}
           </NavLink>
         ))}

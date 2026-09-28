@@ -161,6 +161,7 @@ select:focus-visible {
 .content {
   padding: 24px;
   flex: 1;
+  min-width: 0;
 }
 
 .page-card {
@@ -174,6 +175,11 @@ select:focus-visible {
 .page-card h1 {
   margin: 0 0 8px;
   font-size: 1.35rem;
+}
+
+.page-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
 }
 
 .page-card p {
@@ -262,8 +268,17 @@ select:focus-visible {
   color: var(--text);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: #e4e8ee;
+}
+
+.btn-danger {
+  background: #fde8e6;
+  color: var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #f8d4d0;
 }
 
 .btn-ghost {
@@ -746,6 +761,54 @@ select:focus-visible {
   margin: 0;
 }
 
+@media (max-width: 640px) {
+  .content {
+    padding: 16px;
+  }
+
+  .header {
+    padding: 0 12px;
+    align-items: flex-start;
+    min-height: var(--header-height);
+    height: auto;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .page-header h1 {
+    font-size: 1.2rem;
+  }
+
+  .form-actions .btn,
+  .quick-actions .btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+.dropzone {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  background: var(--surface-muted);
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.dropzone.is-over {
+  border-color: var(--accent);
+  background: #e8f1ff;
+}
+
+.dropzone-label {
+  font-weight: 600;
+}
+
+.dropzone input[type="file"] {
+  max-width: 100%;
+}
+
 .status-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -753,6 +816,7 @@ select:focus-visible {
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .tone-ok {
@@ -930,7 +994,7 @@ select:focus-visible {
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 520px;
+  min-width: 640px;
 }
 
 .data-table th,
@@ -1017,5 +1081,6 @@ select:focus-visible {
 
   .calendar-cell {
     min-height: 0;
+    grid-column-start: auto !important;
   }
 }

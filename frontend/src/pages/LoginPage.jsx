@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { isMockApiEnabled } from "../services";
 import { getUserFacingError } from "../utils/errors";
 
 export default function LoginPage() {
@@ -87,9 +88,15 @@ export default function LoginPage() {
         <button className="btn" type="submit" disabled={submitting}>
           {submitting ? "Signing in..." : "Sign in"}
         </button>
-        <p className="muted" style={{ marginTop: 16 }}>
-          Demo account: john@example.com / password
-        </p>
+        {isMockApiEnabled ? (
+          <p className="muted" style={{ marginTop: 16 }}>
+            Demo account: john@example.com / password
+          </p>
+        ) : (
+          <p className="muted" style={{ marginTop: 16 }}>
+            Use your workspace account to sign in.
+          </p>
+        )}
         <p className="muted">
           Need an account? <Link to="/register">Register</Link>
         </p>

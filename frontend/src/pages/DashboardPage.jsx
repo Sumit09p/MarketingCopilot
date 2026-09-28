@@ -109,6 +109,12 @@ export default function DashboardPage() {
                 <Link className="btn btn-secondary" to="/chat">
                   Chat
                 </Link>
+                <Link className="btn btn-secondary" to="/knowledge">
+                  Knowledge
+                </Link>
+                <Link className="btn btn-secondary" to="/integrations">
+                  Integrations
+                </Link>
               </div>
             </section>
           </div>

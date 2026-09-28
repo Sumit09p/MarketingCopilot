@@ -10,7 +10,7 @@ const titles = {
   "/campaigns": "Campaigns",
   "/campaigns/new": "New campaign",
   "/calendar": "Calendar",
-  "/knowledge": "Knowledge",
+  "/knowledge": "Knowledge Base",
   "/integrations": "Integrations",
 };
 

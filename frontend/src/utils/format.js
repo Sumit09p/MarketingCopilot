@@ -50,3 +50,25 @@ export function formatList(value) {
   if (!Array.isArray(value) || value.length === 0) return "—";
   return value.join(", ");
 }
+
+export function formatBytes(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return String(value);
+  if (number < 1024) return `${number} B`;
+  const units = ["KB", "MB", "GB"];
+  let size = number / 1024;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+export function formatProviderName(provider) {
+  if (!provider) return "Unknown provider";
+  return String(provider)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
