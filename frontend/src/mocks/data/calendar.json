@@ -1,0 +1,20 @@
+{
+  "campaign_1": [
+    {
+      "id": "calendar_item_1",
+      "date": "2026-10-01",
+      "platform": "Instagram",
+      "type": "POST",
+      "caption": "Example caption",
+      "status": "SCHEDULED"
+    },
+    {
+      "id": "calendar_item_2",
+      "date": "2026-10-03",
+      "platform": "LinkedIn",
+      "type": "POST",
+      "caption": "Draft caption",
+      "status": "DRAFT"
+    }
+  ]
+}

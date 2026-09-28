@@ -1,0 +1,14 @@
+[
+  {
+    "provider": "google_analytics",
+    "status": "NOT_CONNECTED"
+  },
+  {
+    "provider": "google_search_console",
+    "status": "NOT_CONNECTED"
+  },
+  {
+    "provider": "instagram",
+    "status": "COMING_SOON"
+  }
+]

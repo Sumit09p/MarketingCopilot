@@ -1,0 +1,33 @@
+{
+  "is_sample_data": true,
+  "label": "Demo / sample data — not live campaign performance",
+  "summary": {
+    "campaigns": 4,
+    "traffic": 12500,
+    "engagement": 3400,
+    "conversions": 210,
+    "revenue": 450000,
+    "ctr": 2.8,
+    "conversion_rate": 1.68,
+    "roi": 3.4
+  },
+  "timeseries": [
+    {
+      "date": "2026-09-01",
+      "traffic": 1200,
+      "engagement": 340,
+      "conversions": 18
+    },
+    {
+      "date": "2026-09-02",
+      "traffic": 1400,
+      "engagement": 390,
+      "conversions": 22
+    }
+  ],
+  "insights": {
+    "summary": "Sample insight only. Campaign performance improved in this demo dataset.",
+    "observations": ["This is sample data for UI development."],
+    "recommendations": ["Replace with backend analytics when the API is available."]
+  }
+}

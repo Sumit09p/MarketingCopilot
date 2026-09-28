@@ -1,0 +1,20 @@
+{
+  "id": "brand_profile_1",
+  "company_name": "Example Company",
+  "industry": "Technology",
+  "website": "https://example.com",
+  "description": "Example company description",
+  "location": "Mumbai",
+  "target_audience": {
+    "age_range": "18-35",
+    "locations": ["India"],
+    "interests": [],
+    "pain_points": []
+  },
+  "brand_voice": "Professional",
+  "brand_tone": "Friendly",
+  "usp": "Example USP",
+  "products_services": [],
+  "competitors": [],
+  "marketing_goals": []
+}
