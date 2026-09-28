@@ -4,6 +4,7 @@ from .competitor_agent import CompetitorAgent
 from .content_agent import ContentAgent
 from .research_agent import ResearchAgent
 from .seo_agent import SEOAgent
+from .recommendation_agent import RecommendationAgent
 
 __all__ = [
     "AgentResult",
@@ -13,4 +14,5 @@ __all__ = [
     "CompetitorAgent",
     "SEOAgent",
     "AnalyticsAgent",
+"RecommendationAgent",
 ]

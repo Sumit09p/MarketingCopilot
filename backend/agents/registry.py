@@ -6,7 +6,7 @@ from .competitor_agent import CompetitorAgent
 from .content_agent import ContentAgent
 from .research_agent import ResearchAgent
 from .seo_agent import SEOAgent
-
+from .recommendation_agent import RecommendationAgent
 
 def build_registry(generate: GenerateFn) -> dict:
     """Canonical agent names used by the orchestrator / API: content, research, competitor, seo, analytics."""
@@ -16,6 +16,7 @@ def build_registry(generate: GenerateFn) -> dict:
         "competitor": CompetitorAgent(generate),
         "seo": SEOAgent(generate),
         "analytics": AnalyticsAgent(generate),
+"recommendation": RecommendationAgent(generate),
     }
 
 
