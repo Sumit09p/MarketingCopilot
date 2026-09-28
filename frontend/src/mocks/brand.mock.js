@@ -10,6 +10,14 @@ export async function getBrand() {
 
 export async function updateBrand(payload) {
   await delay();
-  brand = { ...brand, ...payload, id: brand.id };
+  brand = {
+    ...brand,
+    ...payload,
+    target_audience: {
+      ...brand.target_audience,
+      ...(payload.target_audience || {}),
+    },
+    id: brand.id,
+  };
   return { id: brand.id };
 }

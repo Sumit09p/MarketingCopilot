@@ -5,6 +5,7 @@ import Sidebar from "./Sidebar";
 const titles = {
   "/chat": "Chat",
   "/dashboard": "Dashboard",
+  "/analytics": "Analytics",
   "/brand": "Brand profile",
   "/campaigns": "Campaigns",
   "/campaigns/new": "New campaign",
@@ -13,9 +14,15 @@ const titles = {
   "/integrations": "Integrations",
 };
 
+function titleFromPath(pathname) {
+  if (titles[pathname]) return titles[pathname];
+  if (pathname.startsWith("/campaigns/")) return "Campaign workspace";
+  return "MarketingOS AI";
+}
+
 export default function AppShell() {
   const { pathname } = useLocation();
-  const title = titles[pathname] ?? "MarketingOS AI";
+  const title = titleFromPath(pathname);
 
   return (
     <div className="app-shell">
