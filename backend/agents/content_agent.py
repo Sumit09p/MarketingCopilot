@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from agents.base import AgentResult, BaseAgent
-from prompts.content_prompt import CONTENT_GENERATION_PROMPT
+from .base import AgentResult, BaseAgent
+from ..prompts.content_prompt import CONTENT_GENERATION_PROMPT
 
 REQUIRED_INPUTS = (
     "product_name",

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from agents.analytics_agent import AnalyticsAgent
-from agents.base import GenerateFn
-from agents.competitor_agent import CompetitorAgent
-from agents.content_agent import ContentAgent
-from agents.research_agent import ResearchAgent
-from agents.seo_agent import SEOAgent
+from .analytics_agent import AnalyticsAgent
+from .base import GenerateFn
+from .competitor_agent import CompetitorAgent
+from .content_agent import ContentAgent
+from .research_agent import ResearchAgent
+from .seo_agent import SEOAgent
 
 
 def build_registry(generate: GenerateFn) -> dict:

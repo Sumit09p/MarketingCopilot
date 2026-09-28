@@ -8,12 +8,12 @@ BACKEND = Path(__file__).resolve().parents[1]
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from agents.analytics_agent import AnalyticsAgent
-from agents.competitor_agent import CompetitorAgent
-from agents.content_agent import ContentAgent
-from agents.research_agent import ResearchAgent
-from agents.seo_agent import SEOAgent
-from rag.retriever import SimpleKeywordRetriever
+from backend.agents.analytics_agent import AnalyticsAgent
+from backend.agents.competitor_agent import CompetitorAgent
+from backend.agents.content_agent import ContentAgent
+from backend.agents.research_agent import ResearchAgent
+from backend.agents.seo_agent import SEOAgent
+from backend.rag.retriever import SimpleKeywordRetriever
 
 
 CONTENT_OK = {

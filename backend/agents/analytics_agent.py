@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
-from agents.base import AgentResult, BaseAgent
+from .base import AgentResult, BaseAgent
 
 INSIGHT_PROMPT = """
 You are a marketing analytics interpreter.

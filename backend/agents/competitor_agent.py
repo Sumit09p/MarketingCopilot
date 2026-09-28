@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from agents.base import AgentResult, BaseAgent
+from .base import AgentResult, BaseAgent
 
 COMPETITOR_PROMPT = """
 You are a competitor analysis assistant for marketing teams.
