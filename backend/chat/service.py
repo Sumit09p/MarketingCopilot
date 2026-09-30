@@ -119,6 +119,44 @@ class ChatService:
 
         return message
 
+    def add_assistant_message(
+        self,
+        conversation_id: str,
+        user_id: str,
+        content: str,
+    ) -> dict[str, Any]:
+        """Persist an assistant message in a conversation."""
+
+        conversation = self.get_conversation(
+            conversation_id=conversation_id,
+            user_id=user_id,
+        )
+
+        now = datetime.now(UTC)
+
+        message = build_message_document(
+            conversation_id=str(conversation["_id"]),
+            user_id=user_id,
+            role="assistant",
+            content=content.strip(),
+            now=now,
+        )
+
+        result = self.messages.insert_one(message)
+
+        message["_id"] = result.inserted_id
+
+        self.conversations.update_one(
+            {"_id": conversation["_id"]},
+            {
+                "$set": {
+                    "updated_at": now,
+                }
+            },
+        )
+
+        return message
+
     def get_messages(
         self,
         conversation_id: str,

@@ -84,3 +84,50 @@ def test_message_document_to_response():
     assert response["role"] == "user"
     assert response["content"] == "Hello"
     assert response["created_at"] == now
+
+def test_add_assistant_message():
+    from chat.service import ChatService
+
+    conversation_id = ObjectId()
+
+    service = ChatService.__new__(ChatService)
+
+    conversation = {
+        "_id": conversation_id,
+        "user_id": "user-123",
+        "title": "Test Chat",
+    }
+
+    service.get_conversation = MagicMock(
+        return_value=conversation
+    )
+
+    service.messages = MagicMock()
+    service.conversations = MagicMock()
+
+    inserted_id = ObjectId()
+
+    service.messages.insert_one.return_value.inserted_id = (
+        inserted_id
+    )
+
+    message = service.add_assistant_message(
+        conversation_id=str(conversation_id),
+        user_id="user-123",
+        content="  Hello from AI  ",
+    )
+
+    assert message["_id"] == inserted_id
+    assert message["conversation_id"] == str(conversation_id)
+    assert message["user_id"] == "user-123"
+    assert message["role"] == "assistant"
+    assert message["content"] == "Hello from AI"
+
+    service.get_conversation.assert_called_once_with(
+        conversation_id=str(conversation_id),
+        user_id="user-123",
+    )
+
+    service.messages.insert_one.assert_called_once()
+
+    service.conversations.update_one.assert_called_once()
