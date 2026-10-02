@@ -14,7 +14,7 @@ class IntentDetectionService:
         """
         Detect the primary intent from a user request.
 
-        This initial implementation uses deterministic keyword rules.
+        This implementation uses deterministic keyword rules.
         The service interface can later be backed by an LLM without
         changing callers.
         """
@@ -26,7 +26,9 @@ class IntentDetectionService:
 
         text = user_input.strip().lower()
 
-        # Analytics-related requests.
+        # ---------------------------------------------------------
+        # Analytics-related requests
+        # ---------------------------------------------------------
         if self._contains_any(
             text,
             [
@@ -39,35 +41,65 @@ class IntentDetectionService:
                 "roi",
                 "engagement rate",
                 "traffic",
+                "revenue",
+                "campaign metrics",
+                "marketing metrics",
             ],
         ):
             return IntentResult(
                 intent=IntentType.ANALYTICS,
                 confidence=0.95,
-                reasoning="The request contains marketing analytics or performance terms.",
+                reasoning=(
+                    "The request contains marketing analytics "
+                    "or performance-related terms."
+                ),
             )
 
-        # Image-generation requests.
+        # ---------------------------------------------------------
+        # Image-generation requests
+        # ---------------------------------------------------------
         if self._contains_any(
             text,
             [
                 "generate an image",
                 "generate image",
+                "generate a picture",
+                "generate picture",
                 "create an image",
                 "create image",
+                "create a picture",
+                "create picture",
+                "marketing image",
                 "marketing creative",
+                "social media image",
                 "social media graphic",
-                "banner",
+                "instagram image",
+                "facebook image",
+                "linkedin image",
                 "ad creative",
+                "advertisement creative",
+                "advertising creative",
+                "visual creative",
+                "product image",
+                "product creative",
+                "campaign image",
+                "campaign creative",
+                "banner",
+                "poster",
             ],
         ):
             return IntentResult(
                 intent=IntentType.IMAGE_GENERATION,
                 confidence=0.95,
-                reasoning="The request asks for a marketing image or creative.",
+                reasoning=(
+                    "The request asks for a marketing image "
+                    "or visual creative."
+                ),
             )
 
-        # SEO-related requests.
+        # ---------------------------------------------------------
+        # SEO-related requests
+        # ---------------------------------------------------------
         if self._contains_any(
             text,
             [
@@ -80,15 +112,23 @@ class IntentDetectionService:
                 "search intent",
                 "technical seo",
                 "on-page seo",
+                "on page seo",
+                "seo audit",
+                "seo analysis",
+                "seo optimization",
             ],
         ):
             return IntentResult(
                 intent=IntentType.SEO_ANALYSIS,
                 confidence=0.95,
-                reasoning="The request contains SEO-related terms.",
+                reasoning=(
+                    "The request contains SEO-related terms."
+                ),
             )
 
-        # Competitor-analysis requests.
+        # ---------------------------------------------------------
+        # Competitor-analysis requests
+        # ---------------------------------------------------------
         if self._contains_any(
             text,
             [
@@ -99,15 +139,23 @@ class IntentDetectionService:
                 "competitor research",
                 "competitor website",
                 "competitor keywords",
+                "competitor content",
+                "competitor comparison",
+                "compare competitors",
             ],
         ):
             return IntentResult(
                 intent=IntentType.COMPETITOR_ANALYSIS,
                 confidence=0.95,
-                reasoning="The request asks about competitors or competitive analysis.",
+                reasoning=(
+                    "The request asks about competitors "
+                    "or competitive analysis."
+                ),
             )
 
-        # General research requests.
+        # ---------------------------------------------------------
+        # General research requests
+        # ---------------------------------------------------------
         if self._contains_any(
             text,
             [
@@ -120,31 +168,49 @@ class IntentDetectionService:
                 "customer preferences",
                 "market analysis",
                 "industry analysis",
+                "customer research",
+                "audience analysis",
+                "market opportunity",
+                "market opportunities",
             ],
         ):
             return IntentResult(
                 intent=IntentType.RESEARCH,
                 confidence=0.90,
-                reasoning="The request asks for market, audience, or general research.",
+                reasoning=(
+                    "The request asks for market, audience, "
+                    "or general research."
+                ),
             )
 
-        # Content-generation requests.
+        # ---------------------------------------------------------
+        # Content-generation requests
+        # ---------------------------------------------------------
         if self._contains_any(
             text,
             [
                 "write",
                 "create a caption",
                 "create caption",
+                "generate caption",
                 "instagram caption",
                 "linkedin post",
                 "facebook post",
+                "twitter post",
+                "x post",
                 "tweet",
                 "social media post",
+                "social media content",
                 "blog",
                 "blog post",
+                "write a blog",
+                "create a blog",
+                "generate a blog",
                 "ad copy",
                 "advertisement copy",
+                "advertising copy",
                 "email",
+                "email campaign",
                 "newsletter",
                 "product description",
                 "call to action",
@@ -152,22 +218,37 @@ class IntentDetectionService:
                 "hashtags",
                 "generate content",
                 "create content",
+                "marketing copy",
+                "marketing content",
             ],
         ):
             return IntentResult(
                 intent=IntentType.CONTENT_GENERATION,
                 confidence=0.90,
-                reasoning="The request asks for marketing content generation.",
+                reasoning=(
+                    "The request asks for marketing "
+                    "content generation."
+                ),
             )
 
-        # Fall back to general intent when no specialized intent is detected.
+        # ---------------------------------------------------------
+        # General intent fallback
+        # ---------------------------------------------------------
         return IntentResult(
             intent=IntentType.GENERAL,
             confidence=0.60,
-            reasoning="No specialized marketing intent was detected.",
+            reasoning=(
+                "No specialized marketing intent was detected."
+            ),
         )
 
     @staticmethod
-    def _contains_any(text: str, keywords: list[str]) -> bool:
+    def _contains_any(
+        text: str,
+        keywords: list[str],
+    ) -> bool:
         """Return True when any keyword appears in the text."""
-        return any(keyword in text for keyword in keywords)
+        return any(
+            keyword in text
+            for keyword in keywords
+        )

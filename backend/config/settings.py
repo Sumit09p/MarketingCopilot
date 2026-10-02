@@ -46,7 +46,9 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:5173"
 
+
     SEARCH_API_KEY: SecretStr | None = None
+    IMAGE_PROVIDER: str | None = None
     IMAGE_API_KEY: SecretStr | None = None
 
     @field_validator(

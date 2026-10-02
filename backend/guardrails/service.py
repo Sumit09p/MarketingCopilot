@@ -36,23 +36,41 @@ class AgentGuardrailService:
         whether the selected agent can appropriately handle that intent.
         """
 
+        if not user_input or not user_input.strip():
+            raise GuardrailEvaluationError(
+                "User input cannot be empty."
+            )
+
         try:
-            intent_result = self.intent_service.detect(user_input)
+            intent_result = self.intent_service.detect(
+                user_input
+            )
         except IntentDetectionError as exc:
-            raise GuardrailEvaluationError(str(exc)) from exc
+            raise GuardrailEvaluationError(
+                str(exc)
+            ) from exc
 
         intent = intent_result.intent
 
-        if self._is_invalid(agent, intent):
-            return GuardrailResult(
-                decision=GuardrailDecision.INVALID,
-                agent=agent,
-                detected_intent=intent,
-                confidence=intent_result.confidence,
-                reason=self._invalid_reason(agent, intent),
-            )
+        # ---------------------------------------------------------
+        # 1. Explicitly vague request
+        # ---------------------------------------------------------
+        #
+        # Example:
+        #   Content + "Write something"
+        #   Content + "Make something good"
+        #
+        # These are not clearly incompatible with the selected
+        # agent. They are relevant but lack sufficient information.
+        #
+        # Therefore they must be evaluated BEFORE _is_invalid().
+        # ---------------------------------------------------------
 
-        if self._needs_clarification(agent, intent, user_input):
+        if self._needs_clarification(
+            agent,
+            intent,
+            user_input,
+        ):
             missing_information = self._missing_information(
                 agent,
                 user_input,
@@ -67,13 +85,43 @@ class AgentGuardrailService:
                 missing_information=missing_information,
             )
 
+        # ---------------------------------------------------------
+        # 2. Clearly incompatible request
+        # ---------------------------------------------------------
+
+        if self._is_invalid(
+            agent,
+            intent,
+        ):
+            return GuardrailResult(
+                decision=GuardrailDecision.INVALID,
+                agent=agent,
+                detected_intent=intent,
+                confidence=intent_result.confidence,
+                reason=self._invalid_reason(
+                    agent,
+                    intent,
+                ),
+            )
+
+        # ---------------------------------------------------------
+        # 3. Valid request
+        # ---------------------------------------------------------
+
         return GuardrailResult(
             decision=GuardrailDecision.VALID,
             agent=agent,
             detected_intent=intent,
             confidence=intent_result.confidence,
-            reason=self._valid_reason(agent, intent),
+            reason=self._valid_reason(
+                agent,
+                intent,
+            ),
         )
+
+    # =============================================================
+    # INVALID REQUEST CHECK
+    # =============================================================
 
     @staticmethod
     def _is_invalid(
@@ -82,7 +130,10 @@ class AgentGuardrailService:
     ) -> bool:
         """Return whether an intent is incompatible with an agent."""
 
-        compatible_intents: dict[AgentType, set[IntentType]] = {
+        compatible_intents: dict[
+            AgentType,
+            set[IntentType],
+        ] = {
             AgentType.RESEARCH: {
                 IntentType.RESEARCH,
             },
@@ -105,6 +156,10 @@ class AgentGuardrailService:
 
         return intent not in compatible_intents[agent]
 
+    # =============================================================
+    # CLARIFICATION CHECK
+    # =============================================================
+
     @staticmethod
     def _needs_clarification(
         agent: AgentType,
@@ -114,17 +169,60 @@ class AgentGuardrailService:
         """
         Return whether a relevant request lacks important information.
 
-        General intent is not treated as clarification here because it
-        is normally handled by the general planner rather than an
-        explicitly selected specialized agent.
+        General intent is normally handled by the general planner.
+
+        However, explicitly vague requests such as:
+            "Write something"
+            "Create something"
+            "Make something good"
+
+        can still be recognized as requests for a selected
+        specialized agent and therefore require clarification.
         """
 
-        if not user_input.strip():
+        normalized_input = user_input.strip().lower()
+
+        if not normalized_input:
             return True
 
-        if agent == AgentType.SEO and intent == IntentType.SEO_ANALYSIS:
+        # ---------------------------------------------------------
+        # CONTENT
+        # ---------------------------------------------------------
+
+        if agent == AgentType.CONTENT:
+
+            vague_content_requests = {
+                "write something",
+                "create something",
+                "make something",
+                "write",
+                "create",
+                "make",
+                "make something good",
+                "create something good",
+                "write something good",
+            }
+
+            if normalized_input in vague_content_requests:
+                return True
+
+            # Very short content requests are ambiguous.
+            if (
+                intent == IntentType.CONTENT_GENERATION
+                and len(normalized_input) < 15
+            ):
+                return True
+
+        # ---------------------------------------------------------
+        # SEO
+        # ---------------------------------------------------------
+
+        if (
+            agent == AgentType.SEO
+            and intent == IntentType.SEO_ANALYSIS
+        ):
             return not any(
-                indicator in user_input.lower()
+                indicator in normalized_input
                 for indicator in [
                     "website",
                     "url",
@@ -136,51 +234,51 @@ class AgentGuardrailService:
                 ]
             )
 
-        if (
-            agent == AgentType.CONTENT
-            and intent == IntentType.CONTENT_GENERATION
-        ):
-            vague_content_requests = {
-                "write something",
-                "create something",
-                "make something",
-                "write",
-                "create",
-                "make",
-            }
-
-            normalized_input = user_input.strip().lower()
-
-            if normalized_input in vague_content_requests:
-                return True
-
-            return len(user_input.strip()) < 15
+        # ---------------------------------------------------------
+        # IMAGE
+        # ---------------------------------------------------------
 
         if (
             agent == AgentType.IMAGE
             and intent == IntentType.IMAGE_GENERATION
         ):
-            return len(user_input.strip()) < 15
+            return len(normalized_input) < 15
+
+        # ---------------------------------------------------------
+        # RESEARCH
+        # ---------------------------------------------------------
 
         if (
             agent == AgentType.RESEARCH
             and intent == IntentType.RESEARCH
         ):
-            return len(user_input.strip()) < 15
+            return len(normalized_input) < 15
+
+        # ---------------------------------------------------------
+        # COMPETITOR
+        # ---------------------------------------------------------
 
         if (
             agent == AgentType.COMPETITOR
             and intent == IntentType.COMPETITOR_ANALYSIS
         ):
-            return len(user_input.strip()) < 15
+            return len(normalized_input) < 15
+
+        # ---------------------------------------------------------
+        # ANALYTICS
+        # ---------------------------------------------------------
 
         if (
             agent == AgentType.ANALYTICS
             and intent == IntentType.ANALYTICS
         ):
-            return len(user_input.strip()) < 15
+            return len(normalized_input) < 15
 
         return False
+
+    # =============================================================
+    # MISSING INFORMATION
+    # =============================================================
 
     @staticmethod
     def _missing_information(
@@ -220,6 +318,10 @@ class AgentGuardrailService:
             ]
 
         return []
+
+    # =============================================================
+    # REASONS
+    # =============================================================
 
     @staticmethod
     def _invalid_reason(

@@ -1,5 +1,7 @@
 """Service for creating structured execution plans."""
 
+from __future__ import annotations
+
 from planner.schemas import ExecutionPlan, PlannerTask
 
 
@@ -14,14 +16,11 @@ class PlannerService:
         """
         Create a structured execution plan.
 
-        This initial implementation uses deterministic planning rules.
-        It does not call an external LLM.
+        The planner decides which specialized agents are required
+        and how those agents depend on each other.
 
-        The planner is responsible for deciding which specialized
-        agents are required and how those agents depend on each other.
-
-        The returned plan is intended to be validated by PlanValidator
-        before being passed to the orchestrator.
+        The returned plan is validated by PlanValidator before
+        execution by the orchestrator.
         """
 
         if not user_input or not user_input.strip():
@@ -35,35 +34,84 @@ class PlannerService:
             else None
         )
 
-        # Explicit intent-based planning.
-        if normalized_intent == "RESEARCH":
+        # ---------------------------------------------------------
+        # Explicit intent-based planning
+        # ---------------------------------------------------------
+
+        if normalized_intent in {
+            "RESEARCH",
+            "MARKET_RESEARCH",
+        }:
             return self._research_plan(user_input)
 
-        if normalized_intent == "COMPETITOR_ANALYSIS":
+        if normalized_intent in {
+            "COMPETITOR_ANALYSIS",
+            "COMPETITOR",
+        }:
             return self._competitor_plan(user_input)
 
-        if normalized_intent == "SEO_ANALYSIS":
+        if normalized_intent in {
+            "SEO_ANALYSIS",
+            "SEO",
+        }:
             return self._seo_plan(user_input)
 
-        if normalized_intent == "CONTENT_GENERATION":
+        if normalized_intent in {
+            "CONTENT_GENERATION",
+            "CONTENT",
+        }:
             return self._content_plan(user_input)
 
-        if normalized_intent == "IMAGE_GENERATION":
+        if normalized_intent in {
+            "IMAGE_GENERATION",
+            "IMAGE",
+            "IMAGE_CREATION",
+        }:
             return self._image_plan(user_input)
 
-        if normalized_intent == "ANALYTICS":
+        if normalized_intent in {
+            "ANALYTICS",
+            "MARKETING_ANALYTICS",
+        }:
             return self._analytics_plan(user_input)
 
-        # Multi-agent campaign planning.
+        # ---------------------------------------------------------
+        # Multi-agent campaign planning
+        # ---------------------------------------------------------
+
         if self._is_campaign_request(normalized_input):
             return self._campaign_plan(user_input)
 
-        # If no specialized plan can be determined, fail explicitly
-        # instead of returning an invalid execution plan.
+        # ---------------------------------------------------------
+        # Fallback: detect specialized request directly
+        # ---------------------------------------------------------
+
+        if self._is_image_request(normalized_input):
+            return self._image_plan(user_input)
+
+        if self._is_research_request(normalized_input):
+            return self._research_plan(user_input)
+
+        if self._is_competitor_request(normalized_input):
+            return self._competitor_plan(user_input)
+
+        if self._is_seo_request(normalized_input):
+            return self._seo_plan(user_input)
+
+        if self._is_content_request(normalized_input):
+            return self._content_plan(user_input)
+
+        if self._is_analytics_request(normalized_input):
+            return self._analytics_plan(user_input)
+
         raise ValueError(
             "Unable to create a specialized execution plan "
             "for the provided request."
         )
+
+    # =============================================================
+    # Individual agent plans
+    # =============================================================
 
     @staticmethod
     def _research_plan(user_input: str) -> ExecutionPlan:
@@ -76,7 +124,7 @@ class PlannerService:
                     id="research_1",
                     agent="research",
                     depends_on=[],
-                    required_inputs=[],
+                    required_inputs=["topic"],
                 )
             ],
         )
@@ -92,7 +140,7 @@ class PlannerService:
                     id="competitor_1",
                     agent="competitor",
                     depends_on=[],
-                    required_inputs=[],
+                    required_inputs=["topic"],
                 )
             ],
         )
@@ -108,7 +156,7 @@ class PlannerService:
                     id="seo_1",
                     agent="seo",
                     depends_on=[],
-                    required_inputs=[],
+                    required_inputs=["topic"],
                 )
             ],
         )
@@ -124,7 +172,7 @@ class PlannerService:
                     id="content_1",
                     agent="content",
                     depends_on=[],
-                    required_inputs=[],
+                    required_inputs=["prompt"],
                 )
             ],
         )
@@ -140,7 +188,7 @@ class PlannerService:
                     id="image_1",
                     agent="image",
                     depends_on=[],
-                    required_inputs=[],
+                    required_inputs=["prompt"],
                 )
             ],
         )
@@ -156,10 +204,14 @@ class PlannerService:
                     id="analytics_1",
                     agent="analytics",
                     depends_on=[],
-                    required_inputs=[],
+                    required_inputs=["data"],
                 )
             ],
         )
+
+    # =============================================================
+    # Campaign plan
+    # =============================================================
 
     @staticmethod
     def _campaign_plan(user_input: str) -> ExecutionPlan:
@@ -175,37 +227,37 @@ class PlannerService:
               /   \
              v     v
             SEO  Content
-                    |
-                    v
-                  Image
-
-        Research runs first.
-
-        Competitor analysis depends on research.
-
-        SEO depends on both research and competitor analysis.
-
-        Content depends on research, competitor analysis,
-        and SEO.
-
-        Image generation depends on the completed content.
+                  |
+                  v
+                Image
         """
 
         return ExecutionPlan(
             goal=user_input,
             tasks=[
+                # -------------------------------------------------
+                # 1. Research
+                # -------------------------------------------------
                 PlannerTask(
                     id="research_1",
                     agent="research",
                     depends_on=[],
-                    required_inputs=[],
+                    required_inputs=["topic"],
                 ),
+
+                # -------------------------------------------------
+                # 2. Competitor analysis
+                # -------------------------------------------------
                 PlannerTask(
                     id="competitor_1",
                     agent="competitor",
                     depends_on=["research_1"],
                     required_inputs=["research"],
                 ),
+
+                # -------------------------------------------------
+                # 3. SEO
+                # -------------------------------------------------
                 PlannerTask(
                     id="seo_1",
                     agent="seo",
@@ -218,6 +270,10 @@ class PlannerService:
                         "competitor",
                     ],
                 ),
+
+                # -------------------------------------------------
+                # 4. Content
+                # -------------------------------------------------
                 PlannerTask(
                     id="content_1",
                     agent="content",
@@ -232,6 +288,10 @@ class PlannerService:
                         "seo",
                     ],
                 ),
+
+                # -------------------------------------------------
+                # 5. Image
+                # -------------------------------------------------
                 PlannerTask(
                     id="image_1",
                     agent="image",
@@ -239,6 +299,144 @@ class PlannerService:
                     required_inputs=["content"],
                 ),
             ],
+        )
+
+    # =============================================================
+    # Request detection helpers
+    # =============================================================
+
+    @staticmethod
+    def _is_image_request(text: str) -> bool:
+        """Detect common image-generation requests."""
+
+        keywords = [
+            "generate image",
+            "create image",
+            "make image",
+            "generate a picture",
+            "create a picture",
+            "marketing image",
+            "marketing creative",
+            "social media image",
+            "instagram image",
+            "facebook image",
+            "linkedin image",
+            "ad creative",
+            "advertisement creative",
+            "banner",
+            "poster",
+            "visual creative",
+        ]
+
+        return any(
+            keyword in text
+            for keyword in keywords
+        )
+
+    @staticmethod
+    def _is_research_request(text: str) -> bool:
+        """Detect common research requests."""
+
+        keywords = [
+            "market research",
+            "research market",
+            "research audience",
+            "market trends",
+            "customer research",
+            "audience research",
+            "research trends",
+            "research industry",
+            "industry research",
+            "product research",
+        ]
+
+        return any(
+            keyword in text
+            for keyword in keywords
+        )
+
+    @staticmethod
+    def _is_competitor_request(text: str) -> bool:
+        """Detect competitor-analysis requests."""
+
+        keywords = [
+            "competitor analysis",
+            "competitor research",
+            "analyze competitors",
+            "analyse competitors",
+            "competitor comparison",
+            "compare competitors",
+        ]
+
+        return any(
+            keyword in text
+            for keyword in keywords
+        )
+
+    @staticmethod
+    def _is_seo_request(text: str) -> bool:
+        """Detect SEO requests."""
+
+        keywords = [
+            "seo analysis",
+            "analyze seo",
+            "analyse seo",
+            "seo audit",
+            "seo keywords",
+            "keyword research",
+            "improve seo",
+        ]
+
+        return any(
+            keyword in text
+            for keyword in keywords
+        )
+
+    @staticmethod
+    def _is_content_request(text: str) -> bool:
+        """Detect content-generation requests."""
+
+        keywords = [
+            "write caption",
+            "create caption",
+            "generate caption",
+            "write blog",
+            "create blog",
+            "generate blog",
+            "social media post",
+            "linkedin post",
+            "instagram caption",
+            "facebook post",
+            "marketing copy",
+            "ad copy",
+            "email campaign",
+        ]
+
+        return any(
+            keyword in text
+            for keyword in keywords
+        )
+
+    @staticmethod
+    def _is_analytics_request(text: str) -> bool:
+        """Detect analytics requests."""
+
+        keywords = [
+            "analyze campaign performance",
+            "analyse campaign performance",
+            "campaign analytics",
+            "marketing analytics",
+            "campaign performance",
+            "calculate roi",
+            "marketing roi",
+            "conversion rate",
+            "click through rate",
+            "ctr",
+        ]
+
+        return any(
+            keyword in text
+            for keyword in keywords
         )
 
     @staticmethod

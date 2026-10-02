@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .image_agent import ImageAgent
 from .analytics_agent import AnalyticsAgent
 from .base import GenerateFn
 from .competitor_agent import CompetitorAgent
@@ -16,7 +17,8 @@ def build_registry(generate: GenerateFn) -> dict:
         "competitor": CompetitorAgent(generate),
         "seo": SEOAgent(generate),
         "analytics": AnalyticsAgent(generate),
-"recommendation": RecommendationAgent(generate),
+        "recommendation": RecommendationAgent(generate),
+        "image": ImageAgent(generate),
     }
 
 
