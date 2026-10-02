@@ -10,3 +10,6 @@ google-genai
 sentence-transformers
 faiss-cpu
 numpy
+PyMuPDF
+python-docx
+python-multipart
