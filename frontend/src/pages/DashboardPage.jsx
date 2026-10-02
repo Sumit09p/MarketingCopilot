@@ -43,15 +43,10 @@ export default function DashboardPage() {
   const active = campaigns.filter((item) => String(item.status).toUpperCase() === "ACTIVE");
 
   return (
-    <section className="page-stack">
+    <section className="page-stack dashboard-page">
       <PageHeader
         title="Dashboard"
-        description="Campaign counts and analytics summary from the existing APIs."
-        actions={
-          <Link className="btn" to="/campaigns/new">
-            Create Campaign
-          </Link>
-        }
+        description="Your campaigns and performance at a glance."
       />
 
       {status === "loading" ? <LoadingState message="Loading dashboard..." /> : null}
@@ -91,32 +86,6 @@ export default function DashboardPage() {
               )}
             </section>
 
-            <section className="page-card">
-              <h2>Quick actions</h2>
-              <div className="quick-actions">
-                <Link className="btn" to="/campaigns/new">
-                  New campaign
-                </Link>
-                <Link className="btn btn-secondary" to="/brand">
-                  Brand profile
-                </Link>
-                <Link className="btn btn-secondary" to="/analytics">
-                  Analytics
-                </Link>
-                <Link className="btn btn-secondary" to="/calendar">
-                  Calendar
-                </Link>
-                <Link className="btn btn-secondary" to="/chat">
-                  Chat
-                </Link>
-                <Link className="btn btn-secondary" to="/knowledge">
-                  Knowledge
-                </Link>
-                <Link className="btn btn-secondary" to="/integrations">
-                  Integrations
-                </Link>
-              </div>
-            </section>
           </div>
         </>
       ) : null}

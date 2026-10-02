@@ -16,7 +16,11 @@ export default function ConversationSidebar({
     <aside className="conversation-pane">
       <div className="conversation-pane-header">
         <h2>Conversations</h2>
-        <button type="button" className="btn btn-secondary" onClick={onNewChat} disabled={disabled}>
+        <button type="button" className="btn btn-secondary chat-new-button" onClick={onNewChat} disabled={disabled}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-2 2v-6.5A7.5 7.5 0 1 1 20 11.5Z" />
+            <path d="M12.5 8.5v6M9.5 11.5h6" />
+          </svg>
           New Chat
         </button>
       </div>

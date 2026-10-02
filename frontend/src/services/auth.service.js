@@ -17,6 +17,10 @@ export function getCurrentUser() {
   return apiClient.get("/api/auth/me", withAuth());
 }
 
+export function changePassword(payload) {
+  return apiClient.post("/api/auth/change-password", payload, withAuth());
+}
+
 export function logout() {
   return Promise.resolve(null);
 }

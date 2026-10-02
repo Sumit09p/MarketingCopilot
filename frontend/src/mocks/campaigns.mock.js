@@ -30,14 +30,21 @@ function publicRun(run) {
 
   const elapsed = Date.now() - run.started_ms;
   const completedCount = Math.min(run.tasks.length, Math.floor(elapsed / 1500));
+  const failedTask = run.tasks.some((task) => String(task.status).toUpperCase() === "FAILED");
+  const blockedTask = run.tasks.some((task) => String(task.status).toUpperCase() === "BLOCKED");
   const tasks = run.tasks.map((task, index) => {
+    if (["FAILED", "BLOCKED"].includes(String(task.status).toUpperCase())) return task;
     if (index < completedCount) return { ...task, status: "COMPLETED" };
     if (index === completedCount) return { ...task, status: "RUNNING" };
     return { ...task, status: "PENDING" };
   });
 
-  let status = "RUNNING";
-  if (completedCount >= run.tasks.length) status = "COMPLETED";
+  let status = failedTask ? "FAILED" : blockedTask ? "BLOCKED" : "RUNNING";
+  if (!failedTask && !blockedTask && run.tasks.length > 0 && completedCount >= run.tasks.length) {
+    status = "COMPLETED";
+    const campaign = campaigns.find((item) => item.id === run.campaign_id);
+    if (campaign) campaign.status = "ACTIVE";
+  }
 
   return {
     run_id: run.run_id,

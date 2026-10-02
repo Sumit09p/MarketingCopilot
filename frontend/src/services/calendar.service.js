@@ -9,6 +9,10 @@ export function getCalendar(campaignId) {
   return apiClient.get(`/api/campaigns/${campaignId}/calendar`, auth());
 }
 
+export function updateCalendarItem(campaignId, itemId, payload) {
+  return apiClient.put(`/api/campaigns/${campaignId}/calendar/${itemId}`, payload, auth());
+}
+
 export function addCalendarItem(campaignId, payload) {
   return apiClient.post(`/api/campaigns/${campaignId}/calendar`, payload, auth());
 }

@@ -5,7 +5,7 @@ import PageHeader from "../components/common/PageHeader";
 export default function NotFoundPage() {
   return (
     <section className="page-stack">
-      <PageHeader title="Page not found" description="That URL is not part of the MarketingOS workspace." />
+      <PageHeader title="Page not found" description="That URL is not part of the PRISM workspace." />
       <div className="page-card">
         <EmptyState
           title="Nothing here"

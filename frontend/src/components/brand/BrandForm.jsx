@@ -21,7 +21,12 @@ export default function BrandForm({
   dirty,
 }) {
   return (
-    <form className="stack-form" onSubmit={onSubmit} noValidate>
+    <form className="stack-form brand-form" onSubmit={onSubmit} noValidate>
+      <section className="form-section">
+        <div className="form-section-heading">
+          <h2>Company details</h2>
+          <p>Core information about your business.</p>
+        </div>
       <div className="form-grid">
         <Field id="company_name" label="Company" error={errors.company_name}>
           <input
@@ -55,8 +60,13 @@ export default function BrandForm({
           onChange={(event) => onChange("description", event.target.value)}
         />
       </Field>
+      </section>
 
-      <h2 className="section-title">Target audience</h2>
+      <section className="form-section">
+      <div className="form-section-heading">
+        <h2>Target audience</h2>
+        <p>Describe who you serve and what matters to them.</p>
+      </div>
       <div className="form-grid">
         <Field id="age_range" label="Age range">
           <input
@@ -87,7 +97,13 @@ export default function BrandForm({
         onChange={(value) => onAudienceChange("pain_points", value)}
         placeholder="Add a pain point"
       />
+      </section>
 
+      <section className="form-section">
+      <div className="form-section-heading">
+        <h2>Brand voice</h2>
+        <p>Set the language and positioning your marketing should reflect.</p>
+      </div>
       <div className="form-grid">
         <Field id="brand_voice" label="Voice">
           <input
@@ -108,7 +124,13 @@ export default function BrandForm({
       <Field id="usp" label="USP">
         <textarea id="usp" rows={3} value={form.usp} onChange={(event) => onChange("usp", event.target.value)} />
       </Field>
+      </section>
 
+      <section className="form-section">
+      <div className="form-section-heading">
+        <h2>Products and goals</h2>
+        <p>Keep offerings, competitors, and marketing priorities together.</p>
+      </div>
       <ArrayField
         id="products_services"
         label="Products"
@@ -130,6 +152,7 @@ export default function BrandForm({
         onChange={(value) => onChange("marketing_goals", value)}
         placeholder="Add a goal"
       />
+      </section>
 
       <div className="form-actions">
         <button type="submit" className="btn" disabled={submitting}>

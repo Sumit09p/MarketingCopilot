@@ -233,7 +233,7 @@ export default function ChatPage() {
           <div>
             <strong>{activeId ? "Conversation" : "New chat"}</strong>
             <p className="muted" style={{ margin: 0 }}>
-              Auto uses general chat. Choosing an agent sends an explicit agent request.
+              Ask PRISM for help, or choose a specialist for an explicit request.
             </p>
           </div>
           <AgentSelector value={agent} onChange={setAgent} disabled={sending} />

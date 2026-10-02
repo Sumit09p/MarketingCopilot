@@ -11,6 +11,7 @@ import { formatDate } from "../utils/format";
 const TYPES = ["POST"];
 const STATUSES = ["DRAFT", "SCHEDULED"];
 const PLATFORMS = ["Instagram", "LinkedIn", "Facebook", "YouTube", "X"];
+const MONTHS = Array.from({ length: 12 }, (_, index) => new Date(2000, index, 1).toLocaleString(undefined, { month: "long" }));
 
 function daysInMonth(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate();
@@ -44,6 +45,11 @@ export default function CalendarPage() {
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState(null);
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function loadPage() {
     setStatus("loading");
@@ -95,6 +101,7 @@ export default function CalendarPage() {
   const monthIndex = cursor.getMonth();
   const days = daysInMonth(year, monthIndex);
   const firstWeekday = new Date(year, monthIndex, 1).getDay();
+  const yearOptions = Array.from({ length: 21 }, (_, index) => year - 10 + index);
 
   const byDate = useMemo(() => {
     const map = {};
@@ -107,6 +114,56 @@ export default function CalendarPage() {
   }, [entries]);
 
   const selectedCampaign = campaigns.find((item) => item.id === campaignId);
+  function startEditing(entry) {
+    setEditingId(entry.id);
+    setEditDraft({
+      date: entry.date || "",
+      campaignId,
+      type: entry.type || TYPES[0],
+      platform: entry.platform || PLATFORMS[0],
+      status: entry.status || STATUSES[0],
+      caption: entry.caption || "",
+    });
+    setEditError("");
+    setEditSuccess("");
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditDraft(null);
+    setEditError("");
+  }
+
+  async function saveEdit(entry) {
+    setEditError("");
+    setEditSuccess("");
+    if (!editDraft?.date || !editDraft.platform || !editDraft.type || !editDraft.status) {
+      setEditError("Date, campaign, type, platform, and status are required.");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const updated = await calendarService.updateCalendarItem(campaignId, entry.id, {
+        ...editDraft,
+        caption: editDraft.caption.trim(),
+      });
+      if (!updated || typeof updated !== "object" || !updated.id) {
+        throw new Error("The calendar service did not return the updated item.");
+      }
+      if (editDraft.campaignId !== campaignId) {
+        setEntries((current) => current.filter((item) => item.id !== entry.id));
+      } else {
+        setEntries((current) => current.map((item) => item.id === entry.id ? updated : item));
+      }
+      setEditingId(null);
+      setEditDraft(null);
+      setEditSuccess("Calendar item updated.");
+    } catch (err) {
+      setEditError(getUserFacingError(err, "Could not update that calendar item."));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function onCreate(event) {
     event.preventDefault();
@@ -176,6 +233,7 @@ export default function CalendarPage() {
                     value={campaignId}
                     onChange={(event) => {
                       const next = event.target.value;
+                      cancelEditing();
                       setCampaignId(next);
                       loadCalendar(next);
                     }}
@@ -187,24 +245,19 @@ export default function CalendarPage() {
                     ))}
                   </select>
                 </label>
-                <div className="month-nav">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setCursor(new Date(year, monthIndex - 1, 1))}
-                  >
-                    Previous
-                  </button>
-                  <strong>
-                    {cursor.toLocaleString(undefined, { month: "long", year: "numeric" })}
-                  </strong>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setCursor(new Date(year, monthIndex + 1, 1))}
-                  >
-                    Next
-                  </button>
+                <div className="month-nav" aria-label="Calendar month and year">
+                  <label className="form-field compact">
+                    <span>Month</span>
+                    <select aria-label="Calendar month" value={monthIndex} onChange={(event) => setCursor(new Date(year, Number(event.target.value), 1))}>
+                      {MONTHS.map((month, index) => <option key={month} value={index}>{month}</option>)}
+                    </select>
+                  </label>
+                  <label className="form-field compact">
+                    <span>Year</span>
+                    <select aria-label="Calendar year" value={year} onChange={(event) => setCursor(new Date(Number(event.target.value), monthIndex, 1))}>
+                      {yearOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  </label>
                 </div>
               </div>
 
@@ -240,6 +293,8 @@ export default function CalendarPage() {
 
               <section className="page-card">
                 <h2>Schedule list</h2>
+                {editError ? <p className="error-text" role="alert">{editError}</p> : null}
+                {editSuccess ? <p className="success-text" role="status">{editSuccess}</p> : null}
                 {entries.length === 0 ? (
                   <EmptyState
                     title="No entries this campaign"
@@ -256,21 +311,34 @@ export default function CalendarPage() {
                           <th>Platform</th>
                           <th>Status</th>
                           <th>Caption</th>
+                          <th><span className="visually-hidden">Actions</span></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {entries.map((entry) => (
-                          <tr key={entry.id}>
-                            <td>{formatDate(entry.date)}</td>
-                            <td>{selectedCampaign?.name || campaignId}</td>
-                            <td>{entry.type}</td>
-                            <td>{entry.platform}</td>
-                            <td>
-                              <StatusBadge status={entry.status} />
-                            </td>
-                            <td>{entry.caption || "—"}</td>
-                          </tr>
-                        ))}
+                        {entries.map((entry) => {
+                          const isEditing = editingId === entry.id;
+                          const field = (name, label, value, options) => options ? (
+                            <select className="schedule-edit-field" aria-label={label} value={value} onChange={(event) => setEditDraft((current) => ({ ...current, [name]: event.target.value }))}>
+                              {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </select>
+                          ) : <input className="schedule-edit-field" aria-label={label} type={name === "date" ? "date" : "text"} value={value} onChange={(event) => setEditDraft((current) => ({ ...current, [name]: event.target.value }))} />;
+                          return (
+                            <tr key={entry.id}>
+                              <td>{isEditing ? field("date", "Schedule date", editDraft.date) : formatDate(entry.date)}</td>
+                              <td>{isEditing ? field("campaignId", "Campaign", editDraft.campaignId, campaigns.map((item) => ({ value: item.id, label: item.name }))) : selectedCampaign?.name || campaignId}</td>
+                              <td>{isEditing ? field("type", "Content type", editDraft.type, TYPES.map((item) => ({ value: item, label: item }))) : entry.type}</td>
+                              <td>{isEditing ? field("platform", "Platform", editDraft.platform, PLATFORMS.map((item) => ({ value: item, label: item }))) : entry.platform}</td>
+                              <td>{isEditing ? field("status", "Status", editDraft.status, STATUSES.map((item) => ({ value: item, label: item }))) : <StatusBadge status={entry.status} />}</td>
+                              <td>{isEditing ? <textarea className="schedule-edit-caption" aria-label="Caption" rows={2} value={editDraft.caption} onChange={(event) => setEditDraft((current) => ({ ...current, caption: event.target.value }))} /> : entry.caption || "-"}</td>
+                              <td className="schedule-row-action">
+                                {isEditing ? <div className="schedule-edit-actions">
+                                  <button type="button" className="icon-button" onClick={() => saveEdit(entry)} disabled={savingEdit} aria-label="Save schedule changes" title="Save changes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" /></svg></button>
+                                  <button type="button" className="icon-button schedule-cancel-edit" onClick={cancelEditing} disabled={savingEdit} aria-label="Cancel schedule edit" title="Cancel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+                                </div> : <button type="button" className="icon-button" onClick={() => startEditing(entry)} disabled={Boolean(editingId)} aria-label={`Edit ${entry.caption || "schedule item"}`} title="Edit schedule item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" /></svg></button>}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -2,7 +2,7 @@ import { AGENTS } from "../../utils/constants";
 
 export default function AgentSelector({ value, onChange, disabled }) {
   return (
-    <label className="agent-selector">
+    <label className={`agent-selector agent-${value || "auto"}`}>
       Agent
       <select
         className="agent-select"

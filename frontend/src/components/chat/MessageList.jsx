@@ -25,7 +25,7 @@ export default function MessageList({
     return (
       <div className="message-list welcome-state">
         <div className="welcome-copy">
-          <p className="welcome-kicker">MarketingOS AI</p>
+          <p className="welcome-kicker">✦ Ask PRISM</p>
           <h2>How can I help with your marketing?</h2>
           <p className="muted">Choose an example or type your own question. Examples fill the composer and do not send automatically.</p>
         </div>
@@ -51,10 +51,13 @@ export default function MessageList({
         <MessageBubble key={message.id} role={message.role} content={message.content} />
       ))}
       {sending ? (
-        <article className="message-bubble assistant typing" aria-live="polite">
-          <span className="message-role">MarketingOS AI</span>
-          <p className="message-content">MarketingOS AI is thinking...</p>
-        </article>
+        <div className="message-row assistant">
+          <img className="message-avatar prism-message-avatar" src="/brand/prism-icon.png" alt="" aria-hidden="true" />
+          <article className="message-bubble assistant typing" aria-live="polite">
+            <span className="message-role">PRISM</span>
+            <p className="message-content">PRISM is thinking...</p>
+          </article>
+        </div>
       ) : null}
     </div>
   );

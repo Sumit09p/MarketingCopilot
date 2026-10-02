@@ -12,12 +12,13 @@ const titles = {
   "/calendar": "Calendar",
   "/knowledge": "Knowledge Base",
   "/integrations": "Integrations",
+  "/profile": "Profile",
 };
 
 function titleFromPath(pathname) {
   if (titles[pathname]) return titles[pathname];
   if (pathname.startsWith("/campaigns/")) return "Campaign workspace";
-  return "MarketingOS AI";
+  return "PRISM";
 }
 
 export default function AppShell() {

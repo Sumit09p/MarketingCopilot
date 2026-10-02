@@ -84,6 +84,14 @@ export default function CampaignDetailPage() {
       try {
         const data = await fetchRun(runId);
         if (cancelled) return;
+        if (String(data?.status).toUpperCase() === "COMPLETED") {
+          try {
+            const latestCampaign = await campaignsService.getCampaign(campaignId);
+            if (!cancelled && latestCampaign) setCampaign(latestCampaign);
+          } catch {
+            // Keep the run result visible if the campaign refresh is temporarily unavailable.
+          }
+        }
         if (!data || !isRunActive(data?.status)) stopPolling();
       } catch (err) {
         if (cancelled) return;

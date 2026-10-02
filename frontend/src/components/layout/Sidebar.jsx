@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useTheme } from "../../context/ThemeContext";
 
 const links = [
   { to: "/chat", label: "Chat" },
@@ -16,11 +17,13 @@ function isPrefixNav(to) {
 }
 
 export default function Sidebar() {
+  const { theme } = useTheme();
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        MarketingOS AI
-        <span>Marketing workspace</span>
+        <img className="sidebar-logo" src={theme === "dark" ? "/brand/prism-logo-right-dark.png" : "/brand/prism-logo-right.png"} alt="PRISM" />
+        <img className="sidebar-icon" src="/brand/prism-icon.png" alt="PRISM" />
+        <span>AI Marketing Copilot</span>
       </div>
       <nav className="sidebar-nav" aria-label="Main">
         {links.map((link) => (

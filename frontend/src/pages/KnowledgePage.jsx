@@ -33,6 +33,7 @@ export default function KnowledgePage() {
   const [error, setError] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [uploadSuccess, setUploadSuccess] = useState("");
+  const [recentUpload, setRecentUpload] = useState(null);
   const [deleteError, setDeleteError] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -53,11 +54,14 @@ export default function KnowledgePage() {
     }
     try {
       const data = await knowledgeService.listDocuments();
-      setDocuments(Array.isArray(data) ? data : []);
+      const items = Array.isArray(data) ? data : [];
+      setDocuments(items);
       setStatus("ready");
+      return items;
     } catch (err) {
       setError(getUserFacingError(err, "Could not load knowledge documents."));
       if (!silent) setStatus("error");
+      return null;
     }
   }, []);
 
@@ -82,6 +86,7 @@ export default function KnowledgePage() {
   function chooseFile(file) {
     setUploadError("");
     setUploadSuccess("");
+    setRecentUpload(null);
     setDeleteError("");
     if (!file) {
       setSelectedFile(null);
@@ -115,8 +120,9 @@ export default function KnowledgePage() {
     try {
       const result = await knowledgeService.uploadDocument(formData);
       const filename = result?.filename || selectedFile.name;
-      const uploadStatus = result?.status || "PROCESSING";
-      setUploadSuccess(`${filename} uploaded. Status: ${uploadStatus}.`);
+      const id = result?.document_id || result?.id || "";
+      setUploadSuccess(`${filename} uploaded.`);
+      setRecentUpload({ id, filename });
       setSelectedFile(null);
       if (inputRef.current) inputRef.current.value = "";
       await loadDocuments({ silent: true });
@@ -153,7 +159,11 @@ export default function KnowledgePage() {
         title="Knowledge Base"
         description="Upload brand and marketing documents so workflows can use them as context. Files are stored and processed through the knowledge API (PDF, DOCX, TXT)."
         actions={
-          <button type="button" className="btn btn-secondary" onClick={() => loadDocuments()} disabled={status === "loading"}>
+          <button type="button" className="btn kb-refresh-button" onClick={() => loadDocuments()} disabled={status === "loading"}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 7v5h-5M4 17v-5h5" />
+              <path d="M5.5 9a7 7 0 0 1 11.6-2L20 12M4 12l2.9 5a7 7 0 0 0 11.6-2" />
+            </svg>
             Refresh
           </button>
         }
@@ -176,6 +186,19 @@ export default function KnowledgePage() {
             </p>
             {uploadError ? <p className="error-text">{uploadError}</p> : null}
             {uploadSuccess ? <p className="success-text">{uploadSuccess}</p> : null}
+            {recentUpload ? (() => {
+              const uploadedDocument = documents.find((doc) =>
+                recentUpload.id
+                  ? documentId(doc) === recentUpload.id
+                  : doc.filename === recentUpload.filename
+              );
+              return uploadedDocument ? (
+                <div className="kb-upload-status" aria-live="polite">
+                  <span>{uploadedDocument.filename || recentUpload.filename}</span>
+                  <StatusBadge status={uploadedDocument.status} />
+                </div>
+              ) : null;
+            })() : null}
             <form className="stack-form" onSubmit={onUpload}>
               <div
                 className={`dropzone${dragOver ? " is-over" : ""}`}
@@ -225,6 +248,8 @@ export default function KnowledgePage() {
                   disabled={uploading || !selectedFile}
                   onClick={() => {
                     setSelectedFile(null);
+                    setRecentUpload(null);
+                    setUploadSuccess("");
                     if (inputRef.current) inputRef.current.value = "";
                   }}
                 >
@@ -253,7 +278,7 @@ export default function KnowledgePage() {
                     <th>Size</th>
                     <th>Status</th>
                     <th>Uploaded</th>
-                    <th>Notes</th>
+                    <th>Processing information</th>
                     <th>Actions</th>
                   </tr>
                 </thead>

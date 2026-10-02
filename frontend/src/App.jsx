@@ -14,6 +14,7 @@ import IntegrationsPage from "./pages/IntegrationsPage";
 import KnowledgePage from "./pages/KnowledgePage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import ProfilePage from "./pages/ProfilePage";
 import RegisterPage from "./pages/RegisterPage";
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/knowledge" element={<KnowledgePage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/chat" replace />} />

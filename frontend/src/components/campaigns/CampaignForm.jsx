@@ -13,6 +13,11 @@ function Field({ id, label, error, children }) {
 export default function CampaignForm({ form, errors, onChange, onPlatformToggle, onSubmit, submitting }) {
   return (
     <form className="stack-form" onSubmit={onSubmit} noValidate>
+      <section className="form-section">
+        <div className="form-section-heading">
+          <h2>Campaign details</h2>
+          <p>Define the campaign goal, offering, and intended audience.</p>
+        </div>
       <div className="form-grid">
         <Field id="name" label="Campaign name" error={errors.name}>
           <input id="name" value={form.name} onChange={(event) => onChange("name", event.target.value)} />
@@ -42,7 +47,13 @@ export default function CampaignForm({ form, errors, onChange, onPlatformToggle,
           />
         </Field>
       </div>
+      </section>
 
+      <section className="form-section">
+        <div className="form-section-heading">
+          <h2>Channels</h2>
+          <p>Choose the platforms this campaign will use.</p>
+        </div>
       <fieldset className="form-field">
         <legend>Platforms</legend>
         <div className="choice-row">
@@ -59,7 +70,13 @@ export default function CampaignForm({ form, errors, onChange, onPlatformToggle,
         </div>
         {errors.platforms ? <span className="field-error">{errors.platforms}</span> : null}
       </fieldset>
+      </section>
 
+      <section className="form-section">
+        <div className="form-section-heading">
+          <h2>Schedule</h2>
+          <p>Set when the campaign should begin and end.</p>
+        </div>
       <div className="form-grid">
         <Field id="duration_start" label="Start date" error={errors.start}>
           <input
@@ -78,6 +95,7 @@ export default function CampaignForm({ form, errors, onChange, onPlatformToggle,
           />
         </Field>
       </div>
+      </section>
 
       <div className="form-actions">
         <button type="submit" className="btn" disabled={submitting}>

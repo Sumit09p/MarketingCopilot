@@ -17,7 +17,7 @@ export default function Composer({ value, onChange, onSend, disabled }) {
   return (
     <form className="composer" onSubmit={handleSubmit}>
       <label className="visually-hidden" htmlFor="composer-input">
-        Message to MarketingOS AI
+        Message to PRISM
       </label>
       <textarea
         id="composer-input"
@@ -25,7 +25,7 @@ export default function Composer({ value, onChange, onSend, disabled }) {
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Ask MarketingOS anything..."
+        placeholder="Ask PRISM anything..."
         disabled={disabled}
       />
       <button className="btn" type="submit" disabled={disabled || !(value || "").trim()}>

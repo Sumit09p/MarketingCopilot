@@ -23,10 +23,12 @@ export default function TimeseriesChart({ points, metric = "traffic" }) {
       <svg className="timeseries-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${metric} over time`}>
         <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="currentColor" strokeOpacity="0.2" />
         <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="currentColor" strokeOpacity="0.2" />
-        <polyline fill="none" stroke="#1f6feb" strokeWidth="3" points={coords.join(" ")} />
+        <line className="chart-grid-line" x1={pad} y1={pad + innerHeight / 3} x2={width - pad} y2={pad + innerHeight / 3} />
+        <line className="chart-grid-line" x1={pad} y1={pad + (innerHeight * 2) / 3} x2={width - pad} y2={pad + (innerHeight * 2) / 3} />
+        <polyline fill="none" stroke="var(--prism-blue)" strokeWidth="3" points={coords.join(" ")} />
         {coords.map((pair, index) => {
           const [x, y] = pair.split(",");
-          return <circle key={series[index].date || index} cx={x} cy={y} r="4" fill="#1f6feb" />;
+          return <circle key={series[index].date || index} cx={x} cy={y} r="4" fill="var(--prism-blue)" />;
         })}
       </svg>
       <div className="chart-legend">
