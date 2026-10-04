@@ -5,7 +5,6 @@ from pathlib import Path
 import json
 
 import faiss
-import numpy as np
 from sentence_transformers import SentenceTransformer
 
 
@@ -27,15 +26,16 @@ class RetrievedChunk:
 
 class SemanticRetriever:
     """
-    Production-oriented local semantic RAG retriever.
+    Local semantic RAG retriever.
 
     Features:
     - Sentence Transformer embeddings
     - FAISS vector similarity search
-    - Document chunking with overlap
+    - Overlapping document chunks
     - Source metadata
     - Similarity threshold filtering
-    - Save/load index for persistence
+    - FAISS index persistence
+    - Chunk metadata persistence
     """
 
     def __init__(
@@ -44,11 +44,16 @@ class SemanticRetriever:
         chunk_size: int = 120,
         chunk_overlap: int = 30,
     ) -> None:
+
         if chunk_size <= 0:
-            raise ValueError("chunk_size must be greater than zero.")
+            raise ValueError(
+                "chunk_size must be greater than zero."
+            )
 
         if chunk_overlap < 0:
-            raise ValueError("chunk_overlap cannot be negative.")
+            raise ValueError(
+                "chunk_overlap cannot be negative."
+            )
 
         if chunk_overlap >= chunk_size:
             raise ValueError(
@@ -64,12 +69,19 @@ class SemanticRetriever:
 
         dimension = self.model.get_embedding_dimension()
 
-        # Inner product on normalized vectors = cosine similarity.
+        # Normalized vectors + inner product = cosine similarity.
         self._index = faiss.IndexFlatIP(dimension)
 
-    def _chunk_text(self, text: str) -> list[str]:
+    # -------------------------------------------------------------
+    # Chunking
+    # -------------------------------------------------------------
+
+    def _chunk_text(
+        self,
+        text: str,
+    ) -> list[str]:
         """
-        Split a document into overlapping word-based chunks.
+        Split text into overlapping word-based chunks.
         """
 
         words = text.split()
@@ -83,9 +95,15 @@ class SemanticRetriever:
         step = self.chunk_size - self.chunk_overlap
 
         while start < len(words):
-            end = min(start + self.chunk_size, len(words))
 
-            chunk = " ".join(words[start:end]).strip()
+            end = min(
+                start + self.chunk_size,
+                len(words),
+            )
+
+            chunk = " ".join(
+                words[start:end]
+            ).strip()
 
             if chunk:
                 chunks.append(chunk)
@@ -97,6 +115,10 @@ class SemanticRetriever:
 
         return chunks
 
+    # -------------------------------------------------------------
+    # Add document
+    # -------------------------------------------------------------
+
     def add_document(
         self,
         source: str,
@@ -105,14 +127,19 @@ class SemanticRetriever:
         """
         Chunk and index a document.
 
-        Returns the number of chunks created.
+        Returns:
+            Number of chunks created.
         """
 
         if not source or not str(source).strip():
-            raise ValueError("Document source is required.")
+            raise ValueError(
+                "Document source is required."
+            )
 
         if text is None or not str(text).strip():
-            raise ValueError("Document text is required.")
+            raise ValueError(
+                "Document text is required."
+            )
 
         source = str(source).strip()
         text = str(text).strip()
@@ -133,6 +160,7 @@ class SemanticRetriever:
         self._index.add(embeddings)
 
         for offset, chunk_text in enumerate(chunks):
+
             self._chunks.append(
                 RetrievedChunk(
                     source=source,
@@ -143,6 +171,10 @@ class SemanticRetriever:
             )
 
         return len(chunks)
+
+    # -------------------------------------------------------------
+    # Retrieve
+    # -------------------------------------------------------------
 
     def retrieve(
         self,
@@ -164,7 +196,9 @@ class SemanticRetriever:
             return []
 
         if min_score < -1.0 or min_score > 1.0:
-            raise ValueError("min_score must be between -1.0 and 1.0.")
+            raise ValueError(
+                "min_score must be between -1.0 and 1.0."
+            )
 
         query_embedding = self.model.encode(
             [str(query).strip()],
@@ -172,7 +206,10 @@ class SemanticRetriever:
             normalize_embeddings=True,
         ).astype("float32")
 
-        k = min(top_k, len(self._chunks))
+        k = min(
+            top_k,
+            len(self._chunks),
+        )
 
         scores, indices = self._index.search(
             query_embedding,
@@ -181,7 +218,11 @@ class SemanticRetriever:
 
         results: list[dict] = []
 
-        for score, index in zip(scores[0], indices[0]):
+        for score, index in zip(
+            scores[0],
+            indices[0],
+        ):
+
             if index < 0:
                 continue
 
@@ -203,17 +244,30 @@ class SemanticRetriever:
 
         return results
 
-    def save(self, directory: str | Path) -> None:
+    # -------------------------------------------------------------
+    # Persistence
+    # -------------------------------------------------------------
+
+    def save(
+        self,
+        directory: str | Path,
+    ) -> None:
         """
-        Persist the FAISS index and chunk metadata.
+        Persist FAISS index and chunk metadata.
         """
 
         directory = Path(directory)
-        directory.mkdir(parents=True, exist_ok=True)
+
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
         faiss.write_index(
             self._index,
-            str(directory / "index.faiss"),
+            str(
+                directory / "index.faiss"
+            ),
         )
 
         metadata = [
@@ -230,6 +284,7 @@ class SemanticRetriever:
             "w",
             encoding="utf-8",
         ) as file:
+
             json.dump(
                 metadata,
                 file,
@@ -237,15 +292,24 @@ class SemanticRetriever:
                 indent=2,
             )
 
-    def load(self, directory: str | Path) -> None:
+    def load(
+        self,
+        directory: str | Path,
+    ) -> None:
         """
-        Load a previously persisted FAISS index and metadata.
+        Load a previously persisted FAISS index
+        and chunk metadata.
         """
 
         directory = Path(directory)
 
-        index_path = directory / "index.faiss"
-        metadata_path = directory / "metadata.json"
+        index_path = (
+            directory / "index.faiss"
+        )
+
+        metadata_path = (
+            directory / "metadata.json"
+        )
 
         if not index_path.exists():
             raise FileNotFoundError(
@@ -266,7 +330,13 @@ class SemanticRetriever:
             "r",
             encoding="utf-8",
         ) as file:
+
             metadata = json.load(file)
+
+        if not isinstance(metadata, list):
+            raise ValueError(
+                "RAG metadata must be a list."
+            )
 
         self._chunks = [
             RetrievedChunk(
@@ -277,3 +347,43 @@ class SemanticRetriever:
             )
             for item in metadata
         ]
+
+        if self._index.ntotal != len(self._chunks):
+            raise ValueError(
+                "FAISS index size does not match "
+                "stored chunk metadata."
+            )
+
+    # -------------------------------------------------------------
+    # Utility
+    # -------------------------------------------------------------
+
+    @property
+    def document_count(self) -> int:
+        """Return number of unique indexed sources."""
+
+        return len(
+            {
+                chunk.source
+                for chunk in self._chunks
+            }
+        )
+
+    @property
+    def chunk_count(self) -> int:
+        """Return total number of indexed chunks."""
+
+        return len(self._chunks)
+
+    def clear(self) -> None:
+        """Remove all indexed documents."""
+
+        dimension = (
+            self.model.get_embedding_dimension()
+        )
+
+        self._index = faiss.IndexFlatIP(
+            dimension
+        )
+
+        self._chunks = []

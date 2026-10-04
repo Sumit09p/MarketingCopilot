@@ -48,9 +48,7 @@ class TestOrchestratorService(unittest.TestCase):
         )
 
         started_at = time.perf_counter()
-
         result = orchestrator.execute(plan)
-
         elapsed = time.perf_counter() - started_at
 
         self.assertEqual(
@@ -78,14 +76,11 @@ class TestOrchestratorService(unittest.TestCase):
             start_times,
         )
 
-        # Sequential execution would take approximately 1 second.
-        # Parallel execution should finish substantially faster.
         self.assertLess(
             elapsed,
             0.9,
         )
 
-        # Both tasks should start very close to each other.
         self.assertLess(
             abs(
                 start_times["research"]
@@ -246,6 +241,7 @@ class TestOrchestratorService(unittest.TestCase):
 
     def test_dependency_output_is_passed_to_next_task(self) -> None:
         received_inputs = {}
+        received_context = {}
 
         def research_handler(task, inputs, context):
             return {
@@ -255,6 +251,7 @@ class TestOrchestratorService(unittest.TestCase):
 
         def competitor_handler(task, inputs, context):
             received_inputs.update(inputs)
+            received_context.update(context)
             return "competitor analysis"
 
         orchestrator = OrchestratorService(
@@ -280,8 +277,14 @@ class TestOrchestratorService(unittest.TestCase):
             ],
         )
 
-        orchestrator.execute(plan)
+        result = orchestrator.execute(plan)
 
+        self.assertEqual(
+            result.status,
+            "COMPLETED",
+        )
+
+        # Dependency output must reach the next task.
         self.assertEqual(
             received_inputs["research_1"],
             {
@@ -292,6 +295,20 @@ class TestOrchestratorService(unittest.TestCase):
 
         self.assertEqual(
             received_inputs["research"],
+            {
+                "topic": "fitness",
+                "audience": "young adults",
+            },
+        )
+
+        # The research result must be present in shared context.
+        self.assertIn(
+            "research",
+            received_context,
+        )
+
+        self.assertEqual(
+            received_context["research"],
             {
                 "topic": "fitness",
                 "audience": "young adults",

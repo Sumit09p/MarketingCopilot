@@ -6,15 +6,36 @@ from .base import AgentResult, BaseAgent
 
 
 SEO_PROMPT = """
-You are an SEO recommendation assistant.
+You are an SEO recommendation assistant for a marketing team.
 
-Give qualitative keyword and on-page suggestions only.
-Do NOT invent search volume, keyword difficulty, Google rankings,
-traffic numbers, positions, or CTR forecasts.
+Your job is to create qualitative SEO recommendations using:
+- the topic/product
+- target audience
+- research findings
+- competitor analysis
+- brand profile
+- internal knowledge
+
+IMPORTANT RULES:
+1. Give qualitative keyword and on-page suggestions only.
+2. Do NOT invent search volume, keyword difficulty, Google rankings,
+   traffic numbers, positions, CTR forecasts, or other SEO metrics.
+3. Use the supplied research and competitor context.
+4. Use the brand profile when available.
+5. Use internal knowledge when available.
+6. Clearly distinguish recommendations from verified facts.
+7. Do not fabricate numerical claims.
+8. Keep recommendations practical for a marketing team.
 
 Topic: {topic}
 Product: {product}
 Target audience: {target_audience}
+
+Brand profile:
+{brand_profile}
+
+Internal knowledge:
+{knowledge}
 
 Research context:
 {research_context}
@@ -22,7 +43,8 @@ Research context:
 Competitor context:
 {competitor_context}
 
-Return ONLY JSON with exactly these keys:
+Return ONLY valid JSON with exactly these keys:
+
 {{
   "primary_keywords": ["string"],
   "secondary_keywords": ["string"],
@@ -33,9 +55,18 @@ Return ONLY JSON with exactly these keys:
   "recommendations": ["string"]
 }}
 
-Lists must contain at least 1 non-empty string each.
-search_intent, meta_title, and meta_description must be non-empty strings.
-No markdown. No code fences. No fabricated SEO metrics.
+Requirements:
+- primary_keywords must contain at least 1 non-empty string.
+- secondary_keywords must contain at least 1 non-empty string.
+- content_gaps must contain at least 1 non-empty string.
+- recommendations must contain at least 1 non-empty string.
+- search_intent must be a non-empty string.
+- meta_title must be a non-empty string.
+- meta_description must be a non-empty string.
+
+No markdown.
+No code fences.
+No fabricated SEO metrics.
 """
 
 
@@ -50,10 +81,11 @@ class SEOAgent(BaseAgent):
     ) -> AgentResult:
 
         payload = dict(input_data or {})
+        context = context or {}
 
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
         # 1. Resolve Research dependency
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
 
         research = payload.get("research")
 
@@ -62,9 +94,9 @@ class SEOAgent(BaseAgent):
         else:
             research_data = {}
 
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
         # 2. Resolve Competitor dependency
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
 
         competitor = payload.get("competitor")
 
@@ -73,9 +105,9 @@ class SEOAgent(BaseAgent):
         else:
             competitor_data = {}
 
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
         # 3. Resolve topic
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
 
         topic = str(
             payload.get("topic")
@@ -91,9 +123,9 @@ class SEOAgent(BaseAgent):
                 "Provide at least a topic, product, or research context.",
             )
 
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
         # 4. Resolve product
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
 
         product = str(
             payload.get("product")
@@ -102,53 +134,73 @@ class SEOAgent(BaseAgent):
             or topic
         ).strip()
 
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
         # 5. Resolve target audience
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
 
         target_audience = str(
             payload.get("target_audience")
-            or _extract_research_audience(
-                research_data
-            )
+            or context.get("brand_profile", {}).get("target_audience")
+            or _extract_research_audience(research_data)
             or "not specified"
         ).strip()
 
-        # -----------------------------------------------------
-        # 6. Build research context
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
+        # 6. Resolve Brand Profile
+        # ---------------------------------------------------------
+
+        brand_profile = context.get("brand_profile") or {}
+
+        brand_profile_text = _build_brand_profile_context(
+            brand_profile
+        )
+
+        # ---------------------------------------------------------
+        # 7. Resolve RAG knowledge
+        # ---------------------------------------------------------
+
+        knowledge = context.get("knowledge") or []
+
+        knowledge_text = _build_knowledge_context(
+            knowledge
+        )
+
+        # ---------------------------------------------------------
+        # 8. Build research context
+        # ---------------------------------------------------------
 
         research_context = _build_research_context(
             research_data
         )
 
-        # -----------------------------------------------------
-        # 7. Build competitor context
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
+        # 9. Build competitor context
+        # ---------------------------------------------------------
 
         competitor_context = _build_competitor_context(
             competitor_data
         )
 
-        # -----------------------------------------------------
-        # 8. Build SEO prompt
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
+        # 10. Build SEO prompt
+        # ---------------------------------------------------------
 
         prompt = SEO_PROMPT.format(
             topic=topic,
             product=product,
             target_audience=target_audience,
+            brand_profile=brand_profile_text,
+            knowledge=knowledge_text,
             research_context=research_context,
             competitor_context=competitor_context,
         )
 
-        # -----------------------------------------------------
-        # 9. Execute LLM
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
+        # 11. Execute LLM
+        # ---------------------------------------------------------
 
         try:
             raw = self.call_llm(prompt)
-
             parsed = self.parse_json(raw)
 
             data = {
@@ -188,9 +240,9 @@ class SEOAgent(BaseAgent):
                 str(exc),
             )
 
-        # -----------------------------------------------------
-        # 10. Return structured result
-        # -----------------------------------------------------
+        # ---------------------------------------------------------
+        # 12. Return structured result
+        # ---------------------------------------------------------
 
         return self._ok(
             task_id,
@@ -201,6 +253,8 @@ class SEOAgent(BaseAgent):
                 "product": product,
                 "research_used": bool(research_data),
                 "competitor_used": bool(competitor_data),
+                "brand_profile_used": bool(brand_profile),
+                "knowledge_used": bool(knowledge),
             },
         )
 
@@ -379,6 +433,98 @@ def _build_competitor_context(
     return "\n".join(parts)
 
 
+def _build_brand_profile_context(
+    brand_profile: dict[str, Any],
+) -> str:
+
+    if not brand_profile:
+        return "No brand profile available."
+
+    parts: list[str] = []
+
+    fields = [
+        ("Company", "company_name"),
+        ("Industry", "industry"),
+        ("Description", "description"),
+        ("Target audience", "target_audience"),
+        ("Products/services", "products_services"),
+        ("Brand tone", "brand_tone"),
+        ("Website", "website"),
+        ("Location", "location"),
+        ("Competitors", "competitors"),
+    ]
+
+    for label, key in fields:
+        value = brand_profile.get(key)
+
+        if isinstance(value, list):
+            value = ", ".join(
+                str(item)
+                for item in value
+                if str(item).strip()
+            )
+
+        if value:
+            parts.append(
+                f"{label}: {value}"
+            )
+
+    return "\n".join(parts) or "No brand profile available."
+
+
+def _build_knowledge_context(
+    knowledge: Any,
+) -> str:
+
+    if not knowledge:
+        return "No internal knowledge available."
+
+    if isinstance(knowledge, str):
+        return knowledge
+
+    if isinstance(knowledge, list):
+        parts: list[str] = []
+
+        for item in knowledge:
+            if isinstance(item, dict):
+                text = (
+                    item.get("text")
+                    or item.get("content")
+                    or item.get("chunk")
+                )
+
+                if text:
+                    parts.append(str(text))
+
+            elif item:
+                parts.append(str(item))
+
+        return (
+            "\n".join(parts)
+            or "No internal knowledge available."
+        )
+
+    if isinstance(knowledge, dict):
+        chunks = (
+            knowledge.get("chunks")
+            or knowledge.get("results")
+            or knowledge.get("documents")
+        )
+
+        if isinstance(chunks, list):
+            return _build_knowledge_context(chunks)
+
+        text = (
+            knowledge.get("text")
+            or knowledge.get("content")
+        )
+
+        if text:
+            return str(text)
+
+    return str(knowledge)
+
+
 def _non_empty_string(
     parsed: dict[str, Any],
     key: str,
@@ -409,7 +555,7 @@ def _min_string_list(
             f"Field '{key}' must be a non-empty list."
         )
 
-    cleaned = []
+    cleaned: list[str] = []
 
     for item in value:
 

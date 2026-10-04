@@ -48,7 +48,59 @@ class ContentAgent(BaseAgent):
                     payload[key] = value
 
         # -----------------------------------------------------
-        # 2. Support natural-language requests
+        # 2. Resolve upstream agent outputs
+        # -----------------------------------------------------
+
+        agent_outputs = shared_context.get("agent_outputs") or {}
+
+        research = (
+            payload.get("research")
+            or agent_outputs.get("research")
+            or {}
+        )
+
+        competitor = (
+            payload.get("competitor")
+            or agent_outputs.get("competitor")
+            or {}
+        )
+
+        seo = (
+            payload.get("seo")
+            or agent_outputs.get("seo")
+            or {}
+        )
+
+        if not isinstance(research, dict):
+            research = {}
+
+        if not isinstance(competitor, dict):
+            competitor = {}
+
+        if not isinstance(seo, dict):
+            seo = {}
+
+        # -----------------------------------------------------
+        # 3. Resolve Brand Profile
+        # -----------------------------------------------------
+
+        brand_profile = shared_context.get(
+            "brand_profile"
+        ) or {}
+
+        if not isinstance(brand_profile, dict):
+            brand_profile = {}
+
+        # -----------------------------------------------------
+        # 4. Resolve RAG knowledge
+        # -----------------------------------------------------
+
+        knowledge = shared_context.get(
+            "knowledge"
+        ) or []
+
+        # -----------------------------------------------------
+        # 5. Support natural-language requests
         # -----------------------------------------------------
 
         natural_prompt = (
@@ -67,7 +119,7 @@ class ContentAgent(BaseAgent):
             )
 
         # -----------------------------------------------------
-        # 3. Validate required inputs
+        # 6. Validate required inputs
         # -----------------------------------------------------
 
         missing = [
@@ -84,7 +136,31 @@ class ContentAgent(BaseAgent):
             )
 
         # -----------------------------------------------------
-        # 4. Build generation prompt
+        # 7. Build context
+        # -----------------------------------------------------
+
+        research_context = _build_research_context(
+            research
+        )
+
+        competitor_context = _build_competitor_context(
+            competitor
+        )
+
+        seo_context = _build_seo_context(
+            seo
+        )
+
+        brand_profile_context = _build_brand_profile_context(
+            brand_profile
+        )
+
+        knowledge_context = _build_knowledge_context(
+            knowledge
+        )
+
+        # -----------------------------------------------------
+        # 8. Build generation prompt
         # -----------------------------------------------------
 
         prompt = CONTENT_GENERATION_PROMPT.format(
@@ -93,10 +169,15 @@ class ContentAgent(BaseAgent):
             target_audience=payload["target_audience"],
             platform=payload["platform"],
             tone=payload["tone"],
+            research_context=research_context,
+            competitor_context=competitor_context,
+            seo_context=seo_context,
+            brand_profile=brand_profile_context,
+            knowledge=knowledge_context,
         )
 
         # -----------------------------------------------------
-        # 5. Call LLM and validate output
+        # 9. Call LLM and validate output
         # -----------------------------------------------------
 
         try:
@@ -113,13 +194,20 @@ class ContentAgent(BaseAgent):
             )
 
         # -----------------------------------------------------
-        # 6. Return structured result
+        # 10. Return structured result
         # -----------------------------------------------------
 
         return self._ok(
             task_id,
             summary=validated["campaign_hook"],
-            data=validated,
+            data={
+                **validated,
+                "research_used": bool(research),
+                "competitor_used": bool(competitor),
+                "seo_used": bool(seo),
+                "brand_profile_used": bool(brand_profile),
+                "knowledge_used": bool(knowledge),
+            },
         )
 
     def _validate_output(
@@ -163,26 +251,26 @@ class ContentAgent(BaseAgent):
             "strategy"
         )
 
-        if not isinstance(
-            campaign_hook,
-            str,
-        ) or not campaign_hook.strip():
+        if (
+            not isinstance(campaign_hook, str)
+            or not campaign_hook.strip()
+        ):
             raise ValueError(
                 "campaign_hook must be a non-empty string."
             )
 
-        if not isinstance(
-            caption,
-            str,
-        ) or not caption.strip():
+        if (
+            not isinstance(caption, str)
+            or not caption.strip()
+        ):
             raise ValueError(
                 "caption must be a non-empty string."
             )
 
-        if not isinstance(
-            cta,
-            str,
-        ) or not cta.strip():
+        if (
+            not isinstance(cta, str)
+            or not cta.strip()
+        ):
             raise ValueError(
                 "cta must be a non-empty string."
             )
@@ -234,6 +322,210 @@ class ContentAgent(BaseAgent):
                 for item in strategy
             ],
         }
+
+
+def _build_research_context(
+    research: dict[str, Any],
+) -> str:
+
+    if not research:
+        return "No research context available."
+
+    parts: list[str] = []
+
+    for key, label in [
+        ("topic", "Topic"),
+        ("summary", "Summary"),
+    ]:
+        value = research.get(key)
+
+        if value:
+            parts.append(
+                f"{label}: {value}"
+            )
+
+    for key, label in [
+        ("audience_insights", "Audience insights"),
+        ("market_trends", "Market trends"),
+        ("opportunities", "Market opportunities"),
+    ]:
+        values = research.get(key, [])
+
+        if isinstance(values, list) and values:
+            parts.append(
+                f"{label}: "
+                + "; ".join(
+                    str(item)
+                    for item in values
+                )
+            )
+
+    return "\n".join(parts) or "No research context available."
+
+
+def _build_competitor_context(
+    competitor: dict[str, Any],
+) -> str:
+
+    if not competitor:
+        return "No competitor context available."
+
+    parts: list[str] = []
+
+    for key, label in [
+        ("competitors", "Competitors"),
+        ("strengths", "Competitor strengths"),
+        ("weaknesses", "Competitor weaknesses"),
+        ("content_opportunities", "Content opportunities"),
+        ("recommendations", "Competitor recommendations"),
+    ]:
+        values = competitor.get(key, [])
+
+        if isinstance(values, list) and values:
+            parts.append(
+                f"{label}: "
+                + "; ".join(
+                    str(item)
+                    for item in values
+                )
+            )
+
+    return "\n".join(parts) or "No competitor context available."
+
+
+def _build_seo_context(
+    seo: dict[str, Any],
+) -> str:
+
+    if not seo:
+        return "No SEO context available."
+
+    parts: list[str] = []
+
+    for key, label in [
+        ("primary_keywords", "Primary keywords"),
+        ("secondary_keywords", "Secondary keywords"),
+        ("search_intent", "Search intent"),
+        ("meta_title", "Meta title"),
+        ("meta_description", "Meta description"),
+        ("content_gaps", "Content gaps"),
+        ("recommendations", "SEO recommendations"),
+    ]:
+        value = seo.get(key)
+
+        if isinstance(value, list):
+            if value:
+                parts.append(
+                    f"{label}: "
+                    + "; ".join(
+                        str(item)
+                        for item in value
+                    )
+                )
+        elif value:
+            parts.append(
+                f"{label}: {value}"
+            )
+
+    return "\n".join(parts) or "No SEO context available."
+
+
+def _build_brand_profile_context(
+    brand_profile: dict[str, Any],
+) -> str:
+
+    if not brand_profile:
+        return "No brand profile available."
+
+    parts: list[str] = []
+
+    fields = [
+        ("Company", "company_name"),
+        ("Industry", "industry"),
+        ("Description", "description"),
+        ("Target audience", "target_audience"),
+        ("Products/services", "products_services"),
+        ("Brand tone", "brand_tone"),
+        ("Website", "website"),
+        ("Location", "location"),
+        ("Competitors", "competitors"),
+    ]
+
+    for label, key in fields:
+        value = brand_profile.get(key)
+
+        if isinstance(value, list):
+            value = ", ".join(
+                str(item)
+                for item in value
+                if str(item).strip()
+            )
+
+        if value:
+            parts.append(
+                f"{label}: {value}"
+            )
+
+    return "\n".join(parts) or "No brand profile available."
+
+
+def _build_knowledge_context(
+    knowledge: Any,
+) -> str:
+
+    if not knowledge:
+        return "No internal knowledge available."
+
+    if isinstance(knowledge, str):
+        return knowledge
+
+    if isinstance(knowledge, list):
+        parts: list[str] = []
+
+        for item in knowledge:
+            if isinstance(item, dict):
+                text = (
+                    item.get("text")
+                    or item.get("content")
+                    or item.get("chunk")
+                )
+
+                if text:
+                    parts.append(
+                        str(text)
+                    )
+
+            elif item:
+                parts.append(
+                    str(item)
+                )
+
+        return (
+            "\n".join(parts)
+            or "No internal knowledge available."
+        )
+
+    if isinstance(knowledge, dict):
+        chunks = (
+            knowledge.get("chunks")
+            or knowledge.get("results")
+            or knowledge.get("documents")
+        )
+
+        if isinstance(chunks, list):
+            return _build_knowledge_context(
+                chunks
+            )
+
+        text = (
+            knowledge.get("text")
+            or knowledge.get("content")
+        )
+
+        if text:
+            return str(text)
+
+    return str(knowledge)
 
 
 def _enrich_from_natural_prompt(

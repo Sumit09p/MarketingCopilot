@@ -5,6 +5,46 @@ from services.marketing_pipeline_service import (
 )
 
 
+class FakeKnowledgeService:
+    """
+    Fake RAG service used only for testing.
+
+    This avoids MongoDB / FAISS / embedding model access
+    during the pipeline unit test.
+    """
+
+    def __init__(self):
+        self.calls = []
+
+    def search(
+        self,
+        user_id,
+        query,
+        top_k=3,
+        min_score=0.0,
+    ):
+        self.calls.append(
+            {
+                "user_id": user_id,
+                "query": query,
+                "top_k": top_k,
+                "min_score": min_score,
+            }
+        )
+
+        return [
+            {
+                "source": "brand.txt",
+                "text": (
+                    "MarketingOS targets small businesses "
+                    "with affordable digital marketing."
+                ),
+                "score": 0.93,
+                "chunk_id": 0,
+            }
+        ]
+
+
 class TestMarketingPipelineService(unittest.TestCase):
 
     def test_research_request_pipeline(self):
@@ -116,7 +156,6 @@ class TestMarketingPipelineService(unittest.TestCase):
             "SaaS",
         )
 
-
     def test_multi_agent_campaign_dag(self):
         execution_order = []
 
@@ -189,17 +228,11 @@ class TestMarketingPipelineService(unittest.TestCase):
             },
         )
 
-        # ---------------------------------------------------------
-        # Intent
-        # ---------------------------------------------------------
         self.assertEqual(
             result["intent"]["type"],
             "GENERAL",
         )
 
-        # ---------------------------------------------------------
-        # Five-task campaign DAG
-        # ---------------------------------------------------------
         self.assertEqual(
             len(result["plan"]["tasks"]),
             5,
@@ -216,17 +249,11 @@ class TestMarketingPipelineService(unittest.TestCase):
             ],
         )
 
-        # ---------------------------------------------------------
-        # Complete orchestration
-        # ---------------------------------------------------------
         self.assertEqual(
             result["orchestration"]["status"],
             "COMPLETED",
         )
 
-        # ---------------------------------------------------------
-        # Dependency order
-        # ---------------------------------------------------------
         self.assertEqual(
             execution_order,
             [
@@ -238,18 +265,12 @@ class TestMarketingPipelineService(unittest.TestCase):
             ],
         )
 
-        # ---------------------------------------------------------
-        # All tasks completed
-        # ---------------------------------------------------------
         for task_result in result["orchestration"]["tasks"]:
             self.assertEqual(
                 task_result["status"],
                 "COMPLETED",
             )
 
-        # ---------------------------------------------------------
-        # Final output comes from Image Agent
-        # ---------------------------------------------------------
         self.assertEqual(
             result["orchestration"]["final_result"]["image"],
             "Image generation prepared",
@@ -290,6 +311,265 @@ class TestMarketingPipelineService(unittest.TestCase):
         self.assertEqual(
             result["orchestration"]["final_result"]["status"],
             "IMAGE_PROVIDER_NOT_CONFIGURED",
+        )
+
+    def test_knowledge_reaches_agent(self):
+        received = {}
+
+        def research_handler(task, inputs, context):
+            received["knowledge"] = context["knowledge"]
+
+            return {
+                "status": "ok",
+            }
+
+        service = MarketingPipelineService(
+            agent_handlers={
+                "research": research_handler,
+            }
+        )
+
+        knowledge = [
+            {
+                "source": "brand.txt",
+                "text": (
+                    "Our brand targets small businesses "
+                    "with affordable digital marketing."
+                ),
+                "score": 0.91,
+                "chunk_id": 0,
+            }
+        ]
+
+        service.process_request(
+            user_request="Research my target market",
+            user_id="user123",
+            knowledge=knowledge,
+        )
+
+        self.assertEqual(
+            len(received["knowledge"]),
+            1,
+        )
+
+        self.assertEqual(
+            received["knowledge"][0]["source"],
+            "brand.txt",
+        )
+
+        self.assertIn(
+            "small businesses",
+            received["knowledge"][0]["text"],
+        )
+
+    def test_automatic_rag_retrieval(self):
+        """
+        Verify that the pipeline automatically calls the
+        KnowledgeService when knowledge is not manually supplied.
+        """
+
+        received = {}
+
+        def research_handler(task, inputs, context):
+            received["knowledge"] = context["knowledge"]
+
+            return {
+                "status": "research_completed",
+            }
+
+        fake_knowledge_service = FakeKnowledgeService()
+
+        service = MarketingPipelineService(
+            agent_handlers={
+                "research": research_handler,
+            },
+            knowledge_service=fake_knowledge_service,
+        )
+
+        user_request = (
+            "Research my target market and understand "
+            "our small business customers"
+        )
+
+        result = service.process_request(
+            user_request=user_request,
+            user_id="user123",
+            conversation_id="conversation123",
+        )
+
+        # ---------------------------------------------------------
+        # Verify KnowledgeService.search() was called
+        # ---------------------------------------------------------
+
+        self.assertEqual(
+            len(fake_knowledge_service.calls),
+            1,
+        )
+
+        self.assertEqual(
+            fake_knowledge_service.calls[0]["user_id"],
+            "user123",
+        )
+
+        self.assertEqual(
+            fake_knowledge_service.calls[0]["query"],
+            user_request,
+        )
+
+        self.assertEqual(
+            fake_knowledge_service.calls[0]["top_k"],
+            5,
+        )
+
+        # ---------------------------------------------------------
+        # Verify retrieved knowledge reached the agent
+        # ---------------------------------------------------------
+
+        self.assertEqual(
+            len(received["knowledge"]),
+            1,
+        )
+
+        self.assertEqual(
+            received["knowledge"][0]["source"],
+            "brand.txt",
+        )
+
+        self.assertIn(
+            "small business",
+            received["knowledge"][0]["text"],
+        )
+
+        # ---------------------------------------------------------
+        # Verify pipeline completed normally
+        # ---------------------------------------------------------
+
+        self.assertEqual(
+            result["orchestration"]["status"],
+            "COMPLETED",
+        )
+
+        # ---------------------------------------------------------
+        # Verify RAG metadata is present in final response
+        # ---------------------------------------------------------
+
+        self.assertEqual(
+            result["knowledge"]["retrieved"],
+            1,
+        )
+
+        self.assertEqual(
+            result["knowledge"]["sources"],
+            ["brand.txt"],
+        )
+
+    def test_automatic_brand_profile_retrieval(self):
+        """
+        Verify that the pipeline automatically retrieves the saved
+        brand profile when no brand_profile is manually supplied.
+        """
+
+        received = {}
+
+        def research_handler(task, inputs, context):
+            received["brand_profile"] = context["brand_profile"]
+
+            return {
+                "status": "research_completed",
+            }
+
+        class FakeBrandProfileService:
+            def __init__(self):
+                self.calls = []
+
+            def get_brand_profile(self, user_id):
+                self.calls.append(user_id)
+
+                return {
+                    "id": "brand123",
+                    "user_id": user_id,
+                    "company_name": "CoffeeOS",
+                    "industry": "Coffee",
+                    "description": "Premium coffee brand",
+                    "target_audience": "Young professionals",
+                    "products_services": ["Coffee", "Cold Brew"],
+                    "brand_tone": "Premium and friendly",
+                    "website": "https://coffeeos.example",
+                    "location": "Mumbai",
+                    "competitors": ["BrandA", "BrandB"],
+                    "social_links": {
+                        "instagram": "https://instagram.com/coffeeos"
+                    },
+                }
+
+        fake_brand_profile_service = FakeBrandProfileService()
+
+        service = MarketingPipelineService(
+            agent_handlers={
+                "research": research_handler,
+            },
+            brand_profile_service=fake_brand_profile_service,
+        )
+
+        result = service.process_request(
+            user_request="Research the coffee market trends",
+            user_id="user123",
+            conversation_id="conversation123",
+        )
+
+        # ---------------------------------------------------------
+        # Verify BrandProfileService was called automatically
+        # ---------------------------------------------------------
+
+        self.assertEqual(
+            fake_brand_profile_service.calls,
+            ["user123"],
+        )
+
+        # ---------------------------------------------------------
+        # Verify retrieved brand profile reached the agent
+        # ---------------------------------------------------------
+
+        self.assertEqual(
+            received["brand_profile"]["company_name"],
+            "CoffeeOS",
+        )
+
+        self.assertEqual(
+            received["brand_profile"]["industry"],
+            "Coffee",
+        )
+
+        self.assertEqual(
+            received["brand_profile"]["target_audience"],
+            "Young professionals",
+        )
+
+        # ---------------------------------------------------------
+        # Verify pipeline completed normally
+        # ---------------------------------------------------------
+
+        self.assertEqual(
+            result["orchestration"]["status"],
+            "COMPLETED",
+        )
+
+        # ---------------------------------------------------------
+        # Verify brand profile metadata is present
+        # ---------------------------------------------------------
+
+        self.assertTrue(
+            result["brand_profile"]["loaded"]
+        )
+
+        self.assertEqual(
+            result["brand_profile"]["company_name"],
+            "CoffeeOS",
+        )
+
+        self.assertEqual(
+            result["brand_profile"]["industry"],
+            "Coffee",
         )
 
 

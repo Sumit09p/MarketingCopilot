@@ -12,6 +12,7 @@ def build_user_document(
     now: datetime,
 ) -> dict[str, Any]:
     """Build a MongoDB user document."""
+
     return {
         "name": name.strip(),
         "email": email.strip().lower(),
@@ -21,8 +22,11 @@ def build_user_document(
     }
 
 
-def user_document_to_response(user: dict[str, Any]) -> dict[str, Any]:
+def user_document_to_response(
+    user: dict[str, Any],
+) -> dict[str, Any]:
     """Convert a MongoDB user document into a safe API response."""
+
     return {
         "id": str(user["_id"]),
         "name": user["name"],

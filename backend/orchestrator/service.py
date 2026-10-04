@@ -30,12 +30,14 @@ class OrchestratorService:
     - input propagation
     - failure handling
     - blocked-task handling
+    - agent execution persistence
     """
 
     def __init__(
         self,
         agent_handlers: dict[str, Callable[..., Any]] | None = None,
         max_workers: int = 4,
+        agent_run_service: Any | None = None,
     ) -> None:
         """Initialize the orchestrator."""
 
@@ -46,6 +48,11 @@ class OrchestratorService:
 
         self.agent_handlers = agent_handlers or {}
         self.max_workers = max_workers
+        self.agent_run_service = agent_run_service
+
+    # =============================================================
+    # MAIN EXECUTION
+    # =============================================================
 
     def execute(
         self,
@@ -56,38 +63,69 @@ class OrchestratorService:
         Execute all tasks according to their dependencies.
 
         Independent ready tasks execute concurrently.
+
+        Agent execution lifecycle:
+
+            PENDING
+               ↓
+            RUNNING
+               ↓
+        COMPLETED / FAILED
+
+        If a dependency fails:
+
+            FAILED
+               ↓
+            BLOCKED dependent task
         """
 
-        # Preserve the existing Shared Context architecture.
+        # ---------------------------------------------------------
+        # Shared context
+        # ---------------------------------------------------------
+
         shared_context = dict(context or {})
+
+        # ---------------------------------------------------------
+        # Create execution objects
+        # ---------------------------------------------------------
 
         executions = {
             task.id: TaskExecution(task=task)
             for task in plan.tasks
         }
 
-        # Stores outputs by task ID.
-        #
-        # IMPORTANT:
-        # This stores the COMPLETE agent result wrapper.
+        # ---------------------------------------------------------
+        # Task outputs indexed by task ID
+        # ---------------------------------------------------------
+
+        outputs: dict[str, Any] = {}
+
+        # ---------------------------------------------------------
+        # Agent run IDs indexed by task ID
         #
         # Example:
+        #
         # {
-        #     "agent": "research",
-        #     "status": "COMPLETED",
-        #     "summary": "...",
-        #     "data": {
-        #         "topic": "...",
-        #         ...
-        #     }
+        #     "research_1": "68f....",
+        #     "competitor_1": "68f...."
         # }
-        outputs: dict[str, Any] = {}
+        # ---------------------------------------------------------
+
+        agent_run_ids: dict[str, str | None] = {}
+
+        # ---------------------------------------------------------
+        # Execute DAG
+        # ---------------------------------------------------------
 
         with ThreadPoolExecutor(
             max_workers=self.max_workers
         ) as executor:
 
             while True:
+
+                # -------------------------------------------------
+                # Find pending tasks
+                # -------------------------------------------------
 
                 pending_tasks = [
                     execution
@@ -102,7 +140,7 @@ class OrchestratorService:
                 ready_tasks: list[TaskExecution] = []
 
                 # -------------------------------------------------
-                # Find tasks whose dependencies are resolved
+                # Resolve dependencies
                 # -------------------------------------------------
 
                 for execution in pending_tasks:
@@ -114,7 +152,10 @@ class OrchestratorService:
                         for dependency in task.depends_on
                     ]
 
-                    # Dependency still running/pending.
+                    # ---------------------------------------------
+                    # Dependency still pending/running
+                    # ---------------------------------------------
+
                     if any(
                         state in {
                             TaskStatus.PENDING,
@@ -124,7 +165,10 @@ class OrchestratorService:
                     ):
                         continue
 
-                    # Dependency failed/blocked.
+                    # ---------------------------------------------
+                    # Dependency failed/blocked
+                    # ---------------------------------------------
+
                     if any(
                         state in {
                             TaskStatus.FAILED,
@@ -132,13 +176,30 @@ class OrchestratorService:
                         }
                         for state in dependency_states
                     ):
+
                         execution.status = TaskStatus.BLOCKED
+
                         execution.error = (
                             "Task blocked because one or more "
                             "dependencies failed or were blocked."
                         )
+
+                        # -----------------------------------------
+                        # Persist BLOCKED state
+                        # -----------------------------------------
+
+                        self._persist_blocked_run(
+                            task=task,
+                            context=shared_context,
+                            error=execution.error,
+                        )
+
                         progress_made = True
                         continue
+
+                    # ---------------------------------------------
+                    # All dependencies completed
+                    # ---------------------------------------------
 
                     ready_tasks.append(execution)
 
@@ -157,7 +218,13 @@ class OrchestratorService:
                         "dependency."
                     )
 
-                futures = {}
+                # -------------------------------------------------
+                # Future mapping
+                #
+                # future -> execution
+                # -------------------------------------------------
+
+                futures: dict[Any, TaskExecution] = {}
 
                 # -------------------------------------------------
                 # Start all ready tasks
@@ -165,11 +232,27 @@ class OrchestratorService:
 
                 for execution in ready_tasks:
 
-                    agent_name = execution.task.agent.value
+                    task = execution.task
+                    agent_name = task.agent.value
 
                     handler = self.agent_handlers.get(
                         agent_name
                     )
+
+                    # -------------------------------------------------
+                    # Build exact task inputs BEFORE execution
+                    # -------------------------------------------------
+
+                    task_inputs = self._build_task_inputs(
+                        task=task,
+                        outputs=outputs,
+                        shared_context=shared_context,
+                        plan=plan,
+                    )
+
+                    # -------------------------------------------------
+                    # Missing handler
+                    # -------------------------------------------------
 
                     if handler is None:
 
@@ -179,23 +262,57 @@ class OrchestratorService:
                             f"'{agent_name}'."
                         )
                         execution.attempts += 1
+
+                        # ---------------------------------------------
+                        # Persist failed execution
+                        # ---------------------------------------------
+
+                        run_id = self._persist_start_run(
+                            task=task,
+                            task_inputs=task_inputs,
+                            context=shared_context,
+                            attempt=execution.attempts,
+                        )
+
+                        agent_run_ids[task.id] = run_id
+
+                        self._persist_failed_run(
+                            run_id=run_id,
+                            error=execution.error,
+                            result=None,
+                        )
+
                         progress_made = True
                         continue
+
+                    # -------------------------------------------------
+                    # Mark running
+                    # -------------------------------------------------
 
                     execution.status = TaskStatus.RUNNING
                     execution.attempts += 1
 
-                    task_inputs = self._build_task_inputs(
-                        task=execution.task,
-                        outputs=outputs,
-                        shared_context=shared_context,
-                        plan=plan,
+                    # -------------------------------------------------
+                    # Persist RUNNING
+                    # -------------------------------------------------
+
+                    run_id = self._persist_start_run(
+                        task=task,
+                        task_inputs=task_inputs,
+                        context=shared_context,
+                        attempt=execution.attempts,
                     )
+
+                    agent_run_ids[task.id] = run_id
+
+                    # -------------------------------------------------
+                    # Execute agent asynchronously
+                    # -------------------------------------------------
 
                     future = executor.submit(
                         self._call_handler,
                         handler,
-                        execution.task,
+                        task,
                         task_inputs,
                         shared_context,
                     )
@@ -203,81 +320,161 @@ class OrchestratorService:
                     futures[future] = execution
 
                 # -------------------------------------------------
-                # Collect completed tasks
+                # Collect completed futures
                 # -------------------------------------------------
 
                 for future in as_completed(futures):
 
                     execution = futures[future]
+                    task = execution.task
+
+                    run_id = agent_run_ids.get(task.id)
 
                     try:
 
+                        # ---------------------------------------------
+                        # Get agent result
+                        # ---------------------------------------------
+
                         execution.result = future.result()
 
-                        # IMPORTANT:
-                        # An agent can return a structured FAILED result
-                        # without throwing a Python exception.
-                        #
-                        # Example:
-                        #
-                        # {
-                        #     "status": "FAILED",
-                        #     "error": "..."
-                        # }
-                        #
-                        # Treat that as an actual task failure.
+                        # ---------------------------------------------
+                        # Check structured agent failure
+                        # ---------------------------------------------
+
                         result_status = None
 
-                        if isinstance(execution.result, dict):
+                        if isinstance(
+                            execution.result,
+                            dict,
+                        ):
                             result_status = execution.result.get(
                                 "status"
                             )
 
+                        # ---------------------------------------------
+                        # Agent explicitly returned FAILED
+                        # ---------------------------------------------
+
                         if result_status == "FAILED":
+
                             execution.status = TaskStatus.FAILED
+
                             execution.error = (
                                 execution.result.get("error")
                                 or "Agent execution failed."
                             )
 
+                            # -----------------------------------------
+                            # Persist FAILED
+                            # -----------------------------------------
+
+                            self._persist_failed_run(
+                                run_id=run_id,
+                                error=execution.error,
+                                result=execution.result,
+                            )
+
+                        # ---------------------------------------------
+                        # Agent completed successfully
+                        # ---------------------------------------------
+
                         else:
+
                             execution.status = TaskStatus.COMPLETED
 
-                            # Store complete output by task ID.
-                            #
-                            # Example:
-                            # outputs["research_1"] = {
-                            #     "agent": "research",
-                            #     "status": "COMPLETED",
-                            #     "data": {...}
-                            # }
+                            # -----------------------------------------
+                            # Store output by task ID
+                            # -----------------------------------------
+
                             outputs[
-                                execution.task.id
+                                task.id
                             ] = execution.result
 
-                            # Store complete result using agent name.
+                            # -----------------------------------------
+                            # Store output by agent name
                             #
                             # Example:
+                            #
                             # shared_context["research"] = {
                             #     "agent": "research",
                             #     "status": "COMPLETED",
                             #     "data": {...}
                             # }
+                            # -----------------------------------------
+
                             shared_context[
-                                execution.task.agent.value
+                                task.agent.value
                             ] = execution.result
 
+                            # -----------------------------------------
+                            # Extract confidence
+                            # -----------------------------------------
+
+                            confidence = None
+
+                            if isinstance(
+                                execution.result,
+                                dict,
+                            ):
+                                raw_confidence = (
+                                    execution.result.get(
+                                        "confidence"
+                                    )
+                                )
+
+                                if isinstance(
+                                    raw_confidence,
+                                    (int, float),
+                                ):
+                                    confidence = float(
+                                        raw_confidence
+                                    )
+
+                            # -----------------------------------------
+                            # Persist COMPLETED
+                            # -----------------------------------------
+
+                            self._persist_completed_run(
+                                run_id=run_id,
+                                result=execution.result,
+                                confidence=confidence,
+                            )
+
                     except Exception as exc:
+
+                        # ---------------------------------------------
+                        # Python exception from agent
+                        # ---------------------------------------------
 
                         execution.status = TaskStatus.FAILED
                         execution.error = str(exc)
 
+                        # ---------------------------------------------
+                        # Persist FAILED
+                        # ---------------------------------------------
+
+                        self._persist_failed_run(
+                            run_id=run_id,
+                            error=execution.error,
+                            result=execution.result,
+                        )
+
                     progress_made = True
 
+                # -------------------------------------------------
+                # Safety check
+                # -------------------------------------------------
+
                 if not progress_made:
+
                     raise OrchestrationError(
                         "Orchestration could not make progress."
                     )
+
+        # =========================================================
+        # FINAL RESULT
+        # =========================================================
 
         final_result = self._build_final_result(
             plan=plan,
@@ -337,39 +534,6 @@ class OrchestratorService:
 
         - dependency task ID
         - dependency agent name
-
-        Example:
-
-            research_1
-                ->
-            inputs["research"]
-
-        and:
-
-            competitor_1
-                ->
-            inputs["competitor"]
-
-        IMPORTANT:
-        AgentAdapter returns a complete AgentResult wrapper:
-
-        {
-            "agent": "research",
-            "status": "COMPLETED",
-            "summary": "...",
-            "data": {
-                "topic": "...",
-                ...
-            },
-            "error": None,
-            "confidence": 0.8
-        }
-
-        Downstream agents should receive only the actual
-        business data under "data", not the complete wrapper.
-
-        Therefore dependency outputs are unwrapped before
-        being passed to downstream agents.
         """
 
         inputs: dict[str, Any] = {}
@@ -388,57 +552,46 @@ class OrchestratorService:
             ]
 
             # -----------------------------------------------------
-            # IMPORTANT:
-            #
             # AgentAdapter returns:
             #
             # {
             #     "agent": "research",
             #     "status": "COMPLETED",
             #     "summary": "...",
-            #     "data": {
-            #         "topic": "...",
-            #         ...
-            #     }
+            #     "data": {...}
             # }
             #
-            # Downstream agents such as Competitor, SEO and
-            # Content expect:
-            #
-            # {
-            #     "topic": "...",
-            #     ...
-            # }
-            #
-            # So unwrap the "data" field here.
+            # Downstream agents should receive only "data".
             # -----------------------------------------------------
 
             if (
-                isinstance(dependency_output, dict)
+                isinstance(
+                    dependency_output,
+                    dict,
+                )
                 and dependency_output.get("data") is not None
             ):
-                dependency_input = dependency_output["data"]
+
+                dependency_input = (
+                    dependency_output["data"]
+                )
 
             else:
+
                 dependency_input = dependency_output
 
             # -----------------------------------------------------
-            # Keep task-id keyed output.
+            # Expose by task ID
             #
-            # Useful for tracing/debugging.
-            #
-            # Example:
-            #
-            # inputs["research_1"] = {
-            #     "topic": "...",
-            #     ...
-            # }
+            # inputs["research_1"]
             # -----------------------------------------------------
 
-            inputs[dependency_id] = dependency_input
+            inputs[
+                dependency_id
+            ] = dependency_input
 
             # -----------------------------------------------------
-            # Resolve the dependency's actual agent name.
+            # Resolve actual agent name
             # -----------------------------------------------------
 
             dependency_task = next(
@@ -456,19 +609,13 @@ class OrchestratorService:
                     dependency_task.agent.value
                 )
 
-                # -------------------------------------------------
-                # Example:
-                #
-                # research_1 -> research
-                # competitor_1 -> competitor
-                # seo_1 -> seo
-                #
-                # Downstream agents can now directly access:
+                # ---------------------------------------------
+                # Expose by agent name
                 #
                 # inputs["research"]
                 # inputs["competitor"]
                 # inputs["seo"]
-                # -------------------------------------------------
+                # ---------------------------------------------
 
                 inputs[
                     dependency_agent_name
@@ -480,60 +627,86 @@ class OrchestratorService:
 
         for required_input in task.required_inputs:
 
-            if required_input in shared_context:
+            if required_input not in shared_context:
+                continue
 
-                shared_value = shared_context[
+            shared_value = shared_context[
+                required_input
+            ]
+
+            # -----------------------------------------------------
+            # If shared context contains AgentResult wrapper,
+            # expose only its data.
+            # -----------------------------------------------------
+
+            if (
+                isinstance(
+                    shared_value,
+                    dict,
+                )
+                and shared_value.get("data") is not None
+            ):
+
+                inputs[
                     required_input
-                ]
+                ] = shared_value["data"]
 
-                # Shared context can also contain a complete
-                # AgentResult wrapper. If it does, unwrap it
-                # before passing it to the agent.
-                if (
-                    isinstance(shared_value, dict)
-                    and shared_value.get("data") is not None
-                ):
-                    inputs[required_input] = (
-                        shared_value["data"]
-                    )
-                else:
-                    inputs[required_input] = shared_value
+            else:
+
+                inputs[
+                    required_input
+                ] = shared_value
 
         # ---------------------------------------------------------
-        # 3. Map original user request
+        # 3. Original user request
         # ---------------------------------------------------------
 
         user_request = shared_context.get(
             "user_request"
         )
 
-        if isinstance(user_request, str):
+        if isinstance(
+            user_request,
+            str,
+        ):
             user_request = user_request.strip()
 
         if user_request:
 
-            # Research Agent
+            # -----------------------------------------------------
+            # Research
+            # -----------------------------------------------------
+
             if (
                 "topic" in task.required_inputs
                 and "topic" not in inputs
             ):
                 inputs["topic"] = user_request
 
-            # Image / Content Agent
+            # -----------------------------------------------------
+            # Image / content
+            # -----------------------------------------------------
+
             if (
                 "prompt" in task.required_inputs
                 and "prompt" not in inputs
             ):
                 inputs["prompt"] = user_request
 
-            # Generic query-based agents
+            # -----------------------------------------------------
+            # Generic query
+            # -----------------------------------------------------
+
             if (
                 "query" in task.required_inputs
                 and "query" not in inputs
             ):
                 inputs["query"] = user_request
 
-            # Generic input fallback
+            # -----------------------------------------------------
+            # Generic input
+            # -----------------------------------------------------
+
             if (
                 "input" in task.required_inputs
                 and "input" not in inputs
@@ -541,6 +714,124 @@ class OrchestratorService:
                 inputs["input"] = user_request
 
         return inputs
+
+    # =============================================================
+    # AGENT RUN PERSISTENCE
+    # =============================================================
+
+    def _persist_start_run(
+        self,
+        task: PlannerTask,
+        task_inputs: dict[str, Any],
+        context: dict[str, Any],
+        attempt: int,
+    ) -> str | None:
+        """
+        Persist RUNNING state.
+
+        Persistence is best-effort.
+
+        If MongoDB is unavailable, the agent should still execute.
+        """
+
+        if self.agent_run_service is None:
+            return None
+
+        try:
+
+            return self.agent_run_service.start_run(
+                user_id=context.get("user_id"),
+                conversation_id=context.get(
+                    "conversation_id"
+                ),
+                task_id=task.id,
+                agent=task.agent.value,
+                input_data=task_inputs,
+                attempt=attempt,
+            )
+
+        except Exception:
+            # Persistence must never stop orchestration.
+            return None
+
+    def _persist_completed_run(
+        self,
+        run_id: str | None,
+        result: Any,
+        confidence: float | None,
+    ) -> None:
+        """Persist successful agent execution."""
+
+        if (
+            self.agent_run_service is None
+            or run_id is None
+        ):
+            return
+
+        try:
+
+            self.agent_run_service.complete_run(
+                run_id=run_id,
+                result=result,
+                confidence=confidence,
+            )
+
+        except Exception:
+            # Persistence failure must not affect execution.
+            pass
+
+    def _persist_failed_run(
+        self,
+        run_id: str | None,
+        error: str,
+        result: Any = None,
+    ) -> None:
+        """Persist failed agent execution."""
+
+        if (
+            self.agent_run_service is None
+            or run_id is None
+        ):
+            return
+
+        try:
+
+            self.agent_run_service.fail_run(
+                run_id=run_id,
+                error=error,
+                result=result,
+            )
+
+        except Exception:
+            # Persistence failure must not affect execution.
+            pass
+
+    def _persist_blocked_run(
+        self,
+        task: PlannerTask,
+        context: dict[str, Any],
+        error: str,
+    ) -> None:
+        """Persist a blocked task."""
+
+        if self.agent_run_service is None:
+            return
+
+        try:
+
+            self.agent_run_service.block_run(
+                user_id=context.get("user_id"),
+                conversation_id=context.get(
+                    "conversation_id"
+                ),
+                task_id=task.id,
+                agent=task.agent.value,
+                error=error,
+            )
+
+        except Exception:
+            # Persistence failure must not affect execution.
+            pass
 
     # =============================================================
     # FINAL RESULT
@@ -562,13 +853,17 @@ class OrchestratorService:
             final_task.id
         ]
 
-        if final_execution.status == TaskStatus.COMPLETED:
+        if (
+            final_execution.status
+            == TaskStatus.COMPLETED
+        ):
             return final_execution.result
 
-        # Return the actual failed result when available.
-        #
-        # This makes debugging much easier because the caller
-        # can see the agent's error instead of receiving None.
+        # ---------------------------------------------------------
+        # If final task failed but returned a structured result,
+        # preserve that result for debugging/API response.
+        # ---------------------------------------------------------
+
         if final_execution.result is not None:
             return final_execution.result
 
@@ -589,13 +884,26 @@ class OrchestratorService:
             for execution in executions.values()
         }
 
+        # ---------------------------------------------------------
+        # FAILED takes precedence over BLOCKED.
+        #
+        # Example:
+        #
+        # research = FAILED
+        # competitor = BLOCKED
+        #
+        # Overall = FAILED
+        # ---------------------------------------------------------
+
         if TaskStatus.FAILED in states:
             return "FAILED"
 
         if TaskStatus.BLOCKED in states:
             return "BLOCKED"
 
-        if states == {TaskStatus.COMPLETED}:
+        if states == {
+            TaskStatus.COMPLETED
+        }:
             return "COMPLETED"
 
         return "INCOMPLETE"

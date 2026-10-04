@@ -46,7 +46,15 @@ class TestRealAgentPipeline(unittest.TestCase):
         # ---------------------------------------------------------
         # COMPETITOR AGENT
         # ---------------------------------------------------------
-        if "competitor" in prompt_lower:
+        # ---------------------------------------------------------
+# COMPETITOR AGENT
+# ---------------------------------------------------------
+        if (
+    "competitor" in prompt_lower
+    and "return only json with exactly these keys" in prompt_lower
+    and '"competitors"' in prompt_lower
+    and '"positioning"' in prompt_lower
+        ):
             return """
             {
                 "competitors": [

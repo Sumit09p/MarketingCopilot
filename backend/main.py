@@ -4,6 +4,8 @@ from routes.users import router as users_router
 from routes.auth import router as auth_router
 from routes.chat import router as chat_router
 from routes.knowledge import router as knowledge_router
+from routes.brand_profile import router as brand_profile_router
+
 
 app = FastAPI(
     title="MarketingOS AI",
@@ -16,6 +18,7 @@ app.include_router(chat_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(knowledge_router)
+app.include_router(brand_profile_router)
 
 
 @app.exception_handler(HTTPException)

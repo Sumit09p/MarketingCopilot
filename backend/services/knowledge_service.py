@@ -8,6 +8,7 @@ from bson import ObjectId
 
 from database import get_database
 from knowledge.ingestion import DocumentIngestionService
+from rag.retriever import SemanticRetriever
 
 
 DOCUMENTS_COLLECTION = "documents"
@@ -20,92 +21,89 @@ class KnowledgeService:
     """
     Per-user knowledge management service.
 
-    Responsibilities:
-    - Store document metadata in MongoDB
-    - Extract and index document content
-    - Search a user's knowledge base
-    - Keep each user's RAG index isolated
+    Each user receives an isolated FAISS index.
+    MongoDB stores document metadata and extracted chunks.
     """
 
-    def __init__(
-        self,
-        ingestion_service: DocumentIngestionService | None = None,
-    ) -> None:
+    def __init__(self) -> None:
         database = get_database()
 
         self.documents = database[DOCUMENTS_COLLECTION]
         self.knowledge_chunks = database[KNOWLEDGE_CHUNKS_COLLECTION]
 
-        self.ingestion_service = ingestion_service
-
     # ------------------------------------------------------------------
-    # Storage
+    # Per-user RAG
     # ------------------------------------------------------------------
 
     def _get_storage_path(self, user_id: str) -> Path:
-        """Return the isolated FAISS directory for one user."""
-        safe_user_id = str(user_id).strip()
+        user_id = str(user_id).strip()
 
-        if not safe_user_id:
+        if not user_id:
             raise ValueError("user_id is required.")
 
-        path = RAG_STORAGE_ROOT / safe_user_id
+        path = RAG_STORAGE_ROOT / user_id
         path.mkdir(parents=True, exist_ok=True)
 
         return path
 
-    def _get_ingestion_service(self) -> DocumentIngestionService:
-        """
-        Lazily create the ingestion service.
-
-        This keeps the service easy to test because a fake ingestion
-        service can be injected through the constructor.
-        """
-        if self.ingestion_service is None:
-            storage = self._get_storage_path("global")
-            self.ingestion_service = DocumentIngestionService()
-
-        return self.ingestion_service
-
-    # ------------------------------------------------------------------
-    # Documents
-    # ------------------------------------------------------------------
-
-    def list_documents(self, user_id: str) -> list[dict[str, Any]]:
-        """Return all documents belonging to a user."""
-
-        documents = self.documents.find(
-            {"user_id": str(user_id)}
-        ).sort("created_at", -1)
-
-        return [
-            self._document_to_response(document)
-            for document in documents
-        ]
-
-    def get_document(
+    def _build_ingestion_service(
         self,
         user_id: str,
-        document_id: str,
-    ) -> dict[str, Any] | None:
-        """Return one document owned by the user."""
+    ) -> DocumentIngestionService:
+        """
+        Create a fresh retriever for one user.
 
-        try:
-            object_id = ObjectId(document_id)
-        except Exception:
-            return None
+        The user's FAISS index is loaded from that user's directory
+        when it already exists.
+        """
 
-        document = self.documents.find_one(
-            {
-                "_id": object_id,
-                "user_id": str(user_id),
-            }
+        storage_path = self._get_storage_path(user_id)
+
+        retriever = SemanticRetriever()
+
+        ingestion = DocumentIngestionService(
+            retriever=retriever,
         )
 
-        if document is None:
-            return None
+        index_file = storage_path / "index.faiss"
+        metadata_file = storage_path / "metadata.json"
 
-        return self._document_to_response(document)
+        if index_file.exists() and metadata_file.exists():
+            ingestion.load_index(storage_path)
+
+        return ingestion
+
+    # ------------------------------------------------------------------
+    # Document ingestion
+    # ------------------------------------------------------------------
+
+    def ingest_document(
+        self,
+        *,
+        user_id: str,
+        file_path: str | Path,
+        filename: str,
+    ) -> dict[str, Any]:
+        """
+        Extract and index a document for one user.
+        """
+
+        ingestion = self._build_ingestion_service(user_id)
+
+        result = ingestion.ingest_file(
+            file_path=file_path,
+            source=filename,
+        )
+
+        storage_path = self._get_storage_path(user_id)
+
+        ingestion.save_index(storage_path)
+
+        return result
+
+    # ------------------------------------------------------------------
+    # MongoDB document metadata
+    # ------------------------------------------------------------------
 
     def create_document_record(
         self,
@@ -117,7 +115,6 @@ class KnowledgeService:
         characters: int,
         chunks_created: int,
     ) -> dict[str, Any]:
-        """Persist document metadata after successful ingestion."""
 
         now = datetime.now(UTC)
 
@@ -139,8 +136,50 @@ class KnowledgeService:
 
         return self._document_to_response(document)
 
+    def list_documents(
+        self,
+        user_id: str,
+    ) -> list[dict[str, Any]]:
+
+        documents = self.documents.find(
+            {
+                "user_id": str(user_id),
+            }
+        ).sort(
+            "created_at",
+            -1,
+        )
+
+        return [
+            self._document_to_response(document)
+            for document in documents
+        ]
+
+    def get_document(
+        self,
+        user_id: str,
+        document_id: str,
+    ) -> dict[str, Any] | None:
+
+        try:
+            object_id = ObjectId(document_id)
+        except Exception:
+            return None
+
+        document = self.documents.find_one(
+            {
+                "_id": object_id,
+                "user_id": str(user_id),
+            }
+        )
+
+        if document is None:
+            return None
+
+        return self._document_to_response(document)
+
     # ------------------------------------------------------------------
-    # Knowledge chunks
+    # MongoDB chunks
     # ------------------------------------------------------------------
 
     def store_chunks(
@@ -150,12 +189,6 @@ class KnowledgeService:
         document_id: str,
         chunks: list[dict[str, Any]],
     ) -> int:
-        """
-        Persist extracted chunks in MongoDB.
-
-        The FAISS index is used for semantic retrieval, while MongoDB
-        keeps a durable representation of the knowledge chunks.
-        """
 
         if not chunks:
             return 0
@@ -177,12 +210,13 @@ class KnowledgeService:
                 }
             )
 
-        if not records:
-            return 0
-
         self.knowledge_chunks.insert_many(records)
 
         return len(records)
+
+    # ------------------------------------------------------------------
+    # Semantic search
+    # ------------------------------------------------------------------
 
     def search(
         self,
@@ -192,17 +226,14 @@ class KnowledgeService:
         top_k: int = 3,
         min_score: float = 0.0,
     ) -> list[dict[str, Any]]:
-        """
-        Search the user's knowledge base.
-
-        Each user gets an isolated RAG index.
-        """
 
         if not query or not query.strip():
             raise ValueError("query is required.")
 
         if top_k <= 0:
-            raise ValueError("top_k must be greater than 0.")
+            raise ValueError(
+                "top_k must be greater than 0."
+            )
 
         if not 0.0 <= min_score <= 1.0:
             raise ValueError(
@@ -217,9 +248,7 @@ class KnowledgeService:
         if not index_file.exists() or not metadata_file.exists():
             return []
 
-        ingestion = self._get_ingestion_service()
-
-        ingestion.load_index(storage_path)
+        ingestion = self._build_ingestion_service(user_id)
 
         return ingestion.search(
             query=query,
@@ -228,42 +257,24 @@ class KnowledgeService:
         )
 
     # ------------------------------------------------------------------
-    # Index management
+    # Statistics
     # ------------------------------------------------------------------
 
-    def save_user_index(self, user_id: str) -> None:
-        """Persist the user's FAISS index."""
-
-        storage_path = self._get_storage_path(user_id)
-
-        ingestion = self._get_ingestion_service()
-
-        ingestion.save_index(storage_path)
-
-    def load_user_index(self, user_id: str) -> None:
-        """Load a user's FAISS index if it exists."""
-
-        storage_path = self._get_storage_path(user_id)
-
-        index_file = storage_path / "index.faiss"
-        metadata_file = storage_path / "metadata.json"
-
-        if not index_file.exists() or not metadata_file.exists():
-            return
-
-        ingestion = self._get_ingestion_service()
-
-        ingestion.load_index(storage_path)
-
-    def get_stats(self, user_id: str) -> dict[str, int]:
-        """Return knowledge statistics for a user."""
+    def get_stats(
+        self,
+        user_id: str,
+    ) -> dict[str, int]:
 
         document_count = self.documents.count_documents(
-            {"user_id": str(user_id)}
+            {
+                "user_id": str(user_id),
+            }
         )
 
         chunk_count = self.knowledge_chunks.count_documents(
-            {"user_id": str(user_id)}
+            {
+                "user_id": str(user_id),
+            }
         )
 
         return {
@@ -272,14 +283,13 @@ class KnowledgeService:
         }
 
     # ------------------------------------------------------------------
-    # Helpers
+    # Helper
     # ------------------------------------------------------------------
 
     @staticmethod
     def _document_to_response(
         document: dict[str, Any],
     ) -> dict[str, Any]:
-        """Convert MongoDB document into API-safe response."""
 
         return {
             "id": str(document["_id"]),
