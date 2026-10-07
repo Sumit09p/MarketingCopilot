@@ -1,0 +1,16 @@
+[
+  {
+    "id": "document_1",
+    "filename": "brand-guidelines.pdf",
+    "type": "PDF",
+    "status": "READY",
+    "uploaded_at": "2026-09-23T10:00:00Z"
+  },
+  {
+    "id": "document_2",
+    "filename": "product-catalog.docx",
+    "type": "DOCX",
+    "status": "PROCESSING",
+    "uploaded_at": "2026-09-24T08:00:00Z"
+  }
+]

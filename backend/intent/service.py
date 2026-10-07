@@ -8,15 +8,14 @@ class IntentDetectionError(Exception):
 
 
 class IntentDetectionService:
-    """Detect the primary intent of a user's request."""
+    """Detect the primary intent from a user's request."""
 
     def detect(self, user_input: str) -> IntentResult:
         """
         Detect the primary intent from a user request.
 
-        This implementation uses deterministic keyword rules.
-        The service interface can later be backed by an LLM without
-        changing callers.
+        Multi-capability campaign requests are treated as GENERAL so that
+        the planner can orchestrate multiple specialized agents.
         """
 
         if not user_input or not user_input.strip():
@@ -25,6 +24,26 @@ class IntentDetectionService:
             )
 
         text = user_input.strip().lower()
+
+        # ---------------------------------------------------------
+        # Multi-agent campaign / strategy requests
+        # ---------------------------------------------------------
+        #
+        # A campaign request may contain words such as SEO, research,
+        # competitors, content, etc. Those individual keywords must
+        # not override the higher-level campaign intent.
+        #
+        if self._is_campaign_request(text):
+            return IntentResult(
+                intent=IntentType.GENERAL,
+                confidence=0.95,
+                reasoning=(
+                    "The request asks for a complete marketing campaign "
+                    "or multi-capability marketing strategy. The request "
+                    "will be delegated to the planner for multi-agent "
+                    "orchestration."
+                ),
+            )
 
         # ---------------------------------------------------------
         # Analytics-related requests
@@ -241,6 +260,90 @@ class IntentDetectionService:
                 "No specialized marketing intent was detected."
             ),
         )
+
+    @staticmethod
+    def _is_campaign_request(text: str) -> bool:
+        """
+        Detect requests that require multi-agent campaign orchestration.
+        """
+
+        campaign_terms = [
+            "complete campaign",
+            "full campaign",
+            "marketing campaign",
+            "digital marketing campaign",
+            "complete marketing campaign",
+            "full marketing campaign",
+            "campaign strategy",
+            "marketing strategy",
+            "digital marketing strategy",
+            "complete marketing strategy",
+            "full marketing strategy",
+            "campaign plan",
+            "marketing plan",
+            "complete marketing plan",
+            "full marketing plan",
+            "end-to-end marketing",
+            "end to end marketing",
+            "end-to-end campaign",
+            "end to end campaign",
+        ]
+
+        if not any(term in text for term in campaign_terms):
+            return False
+
+        # Count distinct capabilities requested.
+        capability_groups = [
+            [
+                "research",
+                "market research",
+                "market analysis",
+                "audience research",
+                "market trends",
+            ],
+            [
+                "competitor",
+                "competitors",
+                "competitive analysis",
+            ],
+            [
+                "seo",
+                "search engine optimization",
+                "keyword research",
+            ],
+            [
+                "content",
+                "social media content",
+                "social media",
+                "caption",
+                "blog",
+                "marketing copy",
+            ],
+            [
+                "image",
+                "visual",
+                "creative",
+                "banner",
+                "poster",
+                "ad creative",
+            ],
+            [
+                "analytics",
+                "performance",
+                "campaign metrics",
+                "marketing metrics",
+            ],
+        ]
+
+        matched_groups = 0
+
+        for group in capability_groups:
+            if any(keyword in text for keyword in group):
+                matched_groups += 1
+
+        # A campaign with multiple requested capabilities should
+        # be handled by the planner rather than one specialized agent.
+        return matched_groups >= 2
 
     @staticmethod
     def _contains_any(

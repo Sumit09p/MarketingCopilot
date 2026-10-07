@@ -4,7 +4,6 @@ from unittest.mock import patch
 from services.llm.provider import (
     GeminiProvider,
     LLMConfigurationError,
-    LLMProviderError,
     LLMService,
     MockLLMProvider,
 )
@@ -29,7 +28,11 @@ class TestMockLLMProvider(unittest.TestCase):
 class TestLLMService(unittest.TestCase):
 
     def test_default_provider_is_mock_provider(self):
-        service = LLMService()
+        # Explicitly inject Mock provider so this unit test
+        # does not depend on the real .env configuration.
+        service = LLMService(
+            provider=MockLLMProvider()
+        )
 
         self.assertIsInstance(
             service.provider,
@@ -37,7 +40,10 @@ class TestLLMService(unittest.TestCase):
         )
 
     def test_generate_returns_llm_response(self):
-        service = LLMService()
+        # Use Mock provider for deterministic unit testing.
+        service = LLMService(
+            provider=MockLLMProvider()
+        )
 
         request = LLMRequest(
             prompt="Create an Instagram caption."
@@ -56,7 +62,10 @@ class TestLLMService(unittest.TestCase):
         )
 
     def test_system_prompt_is_accepted(self):
-        service = LLMService()
+        # Use Mock provider so this test never calls Gemini.
+        service = LLMService(
+            provider=MockLLMProvider()
+        )
 
         request = LLMRequest(
             prompt="Write a caption.",

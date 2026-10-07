@@ -1,5 +1,9 @@
 """Schemas for planner tasks and execution plans."""
 
+from __future__ import annotations
+
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from guardrails.schemas import AgentType
@@ -19,4 +23,26 @@ class ExecutionPlan(BaseModel):
 
     goal: str = Field(min_length=1)
     tasks: list[PlannerTask] = Field(min_length=1)
-    
+
+
+class PlannerDecision(BaseModel):
+    """
+    Final decision produced by the LLM planner.
+
+    READY:
+        The request contains enough information and an execution
+        plan can be safely executed.
+
+    NEEDS_CLARIFICATION:
+        More information is required before execution.
+    """
+
+    status: Literal["READY", "NEEDS_CLARIFICATION"]
+
+    clarification_question: str | None = None
+
+    clarification_questions: list[str] = Field(
+        default_factory=list
+    )
+
+    plan: ExecutionPlan | None = None

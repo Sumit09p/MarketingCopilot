@@ -83,6 +83,71 @@ class ChatService:
 
         return conversation
 
+    def rename_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+        title: str,
+    ) -> dict[str, Any]:
+        conversation = self.get_conversation(
+            conversation_id=conversation_id,
+            user_id=user_id,
+        )
+
+        clean_title = title.strip()
+
+        if not clean_title:
+            raise ValueError("Conversation title cannot be empty.")
+
+        now = datetime.now(UTC)
+
+        self.conversations.update_one(
+            {
+                "_id": conversation["_id"],
+                "user_id": user_id,
+            },
+            {
+                "$set": {
+                    "title": clean_title,
+                    "updated_at": now,
+                }
+            },
+        )
+
+        conversation["title"] = clean_title
+        conversation["updated_at"] = now
+
+        return conversation
+
+    def delete_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+    ) -> None:
+        conversation = self.get_conversation(
+            conversation_id=conversation_id,
+            user_id=user_id,
+        )
+
+        conversation_object_id = conversation["_id"]
+        conversation_id_string = str(conversation_object_id)
+
+        # Delete all messages belonging to this conversation.
+        self.messages.delete_many(
+            {
+                "conversation_id": conversation_id_string,
+                "user_id": user_id,
+            }
+        )
+
+        # Delete the conversation itself.
+        self.conversations.delete_one(
+            {
+                "_id": conversation_object_id,
+                "user_id": user_id,
+            }
+        )
+
     def add_user_message(
         self,
         conversation_id: str,

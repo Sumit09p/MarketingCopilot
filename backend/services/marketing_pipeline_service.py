@@ -5,18 +5,27 @@ from typing import Any, Callable
 from agents.adapter import AgentAdapter
 from agents.llm_adapter import build_agent_generator
 from agents.registry import build_registry
+
 from context.service import SharedContextService
+
 from guardrails.schemas import AgentType, GuardrailDecision
 from guardrails.service import AgentGuardrailService
+
 from intent.service import IntentDetectionService
+
 from orchestrator.service import OrchestratorService
-from planner.service import PlannerService
+
+from planner.service import (
+    PlannerClarificationError,
+    PlannerService,
+)
+
 from planner.validator import PlanValidator
+
 from services.agent_run_service import AgentRunService
 from services.brand_profile_service import BrandProfileService
 from services.knowledge_service import KnowledgeService
 from services.llm import LLMService
-
 
 
 class MarketingPipelineService:
@@ -28,7 +37,9 @@ class MarketingPipelineService:
         intent detection
         -> brand profile retrieval
         -> knowledge retrieval
-        -> planning
+        -> conversation context
+        -> Gemini planner
+        -> clarification OR execution plan
         -> plan validation
         -> shared context
         -> dependency-aware orchestration
@@ -37,25 +48,29 @@ class MarketingPipelineService:
     Explicit-agent mode:
 
         agent selection
-        -> guardrail
-        -> VALID
+        -> guardrail compatibility check
         -> intent detection
         -> brand profile retrieval
         -> knowledge retrieval
-        -> planning
+        -> conversation context
+        -> Gemini planner
+        -> clarification OR execution plan
         -> plan validation
         -> shared context
         -> orchestration
 
-    or
+    Important:
 
-        NEEDS_CLARIFICATION
-        -> no agent execution
+    Clarification questions are NOT generated here.
 
-    or
+    Gemini Planner decides:
+        - whether clarification is required
+        - what information is missing
+        - how to ask for it
 
-        INVALID
-        -> no agent execution
+    Brand Profile, RAG and conversation history are supplied to
+    the planner so the system does not repeatedly ask for information
+    that is already available.
     """
 
     def __init__(
@@ -67,9 +82,9 @@ class MarketingPipelineService:
         brand_profile_service: BrandProfileService | None = None,
     ) -> None:
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 1. Core request services
-        # ---------------------------------------------------------
+        # =========================================================
 
         self.intent_service = IntentDetectionService()
 
@@ -77,15 +92,13 @@ class MarketingPipelineService:
             intent_service=self.intent_service,
         )
 
-        self.planner_service = PlannerService()
-
         self.plan_validator = PlanValidator()
 
         self.context_service = SharedContextService()
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 2. Knowledge / RAG service
-        # ---------------------------------------------------------
+        # =========================================================
 
         self.knowledge_service = (
             knowledge_service
@@ -93,9 +106,9 @@ class MarketingPipelineService:
             else KnowledgeService()
         )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 3. Brand Profile service
-        # ---------------------------------------------------------
+        # =========================================================
 
         self.brand_profile_service = (
             brand_profile_service
@@ -103,15 +116,23 @@ class MarketingPipelineService:
             else BrandProfileService()
         )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 4. LLM service
-        # ---------------------------------------------------------
+        # =========================================================
 
         self.llm_service = llm_service or LLMService()
 
-        # ---------------------------------------------------------
-        # 5. Agent execution persistence
-        # ---------------------------------------------------------
+        # =========================================================
+        # 5. Planner
+        # =========================================================
+
+        self.planner_service = PlannerService(
+            llm_service=self.llm_service,
+        )
+
+        # =========================================================
+        # 6. Agent execution persistence
+        # =========================================================
 
         self.agent_run_service = (
             agent_run_service
@@ -119,9 +140,9 @@ class MarketingPipelineService:
             else AgentRunService()
         )
 
-        # ---------------------------------------------------------
-        # 6. Build real agent adapters
-        # ---------------------------------------------------------
+        # =========================================================
+        # 7. Build real agent adapters
+        # =========================================================
 
         if agent_handlers is None:
 
@@ -136,9 +157,9 @@ class MarketingPipelineService:
                 for name, agent in agents.items()
             }
 
-        # ---------------------------------------------------------
-        # 7. Dependency-aware orchestrator
-        # ---------------------------------------------------------
+        # =========================================================
+        # 8. Dependency-aware orchestrator
+        # =========================================================
 
         self.orchestrator = OrchestratorService(
             agent_handlers=agent_handlers,
@@ -220,9 +241,7 @@ class MarketingPipelineService:
 
         Otherwise the profile is loaded from MongoDB using user_id.
 
-        Brand profile retrieval is non-fatal. If the user does not
-        have a profile or retrieval fails, an empty dictionary is
-        returned.
+        Brand profile retrieval is non-fatal.
         """
 
         # ---------------------------------------------------------
@@ -259,6 +278,67 @@ class MarketingPipelineService:
             return {}
 
     # =============================================================
+    # CONVERSATION CONTEXT
+    # =============================================================
+
+    @staticmethod
+    def _normalize_conversation_history(
+        conversation_history: list[Any] | None,
+    ) -> list[dict[str, str]]:
+        """
+        Normalize conversation history into a planner-friendly format.
+
+        Supported inputs:
+            {"role": "...", "content": "..."}
+            objects with .role and .content
+
+        Only useful textual messages are retained.
+        """
+
+        if not conversation_history:
+            return []
+
+        normalized: list[dict[str, str]] = []
+
+        for message in conversation_history:
+
+            if isinstance(message, dict):
+
+                role = message.get("role")
+                content = message.get("content")
+
+            else:
+
+                role = getattr(
+                    message,
+                    "role",
+                    None,
+                )
+
+                content = getattr(
+                    message,
+                    "content",
+                    None,
+                )
+
+            if not role or not content:
+                continue
+
+            content = str(content).strip()
+
+            if not content:
+                continue
+
+            normalized.append(
+                {
+                    "role": str(role),
+                    "content": content,
+                }
+            )
+
+        return normalized
+
+    # =============================================================
     # MAIN REQUEST PROCESSING
     # =============================================================
 
@@ -272,21 +352,25 @@ class MarketingPipelineService:
         campaign_data: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
         selected_agent: AgentType | None = None,
+        conversation_history: list[Any] | None = None,
     ) -> dict[str, Any]:
         """
         Process a marketing request.
 
-        If selected_agent is None:
-            the request follows General Mode.
+        The planner is responsible for deciding whether the request
+        contains enough information to execute.
 
-        If selected_agent is provided:
-            the selected agent is evaluated by the guardrail
-            before any execution takes place.
+        Clarification questions are generated by Gemini through
+        PlannerService.
+
+        Existing brand profile, RAG knowledge and conversation history
+        are supplied to Gemini to avoid repeatedly asking for known
+        business information.
         """
 
-        # ---------------------------------------------------------
-        # 1. Guardrail for explicitly selected agent
-        # ---------------------------------------------------------
+        # =========================================================
+        # 1. Explicit-agent guardrail
+        # =========================================================
 
         guardrail_result = None
 
@@ -299,68 +383,79 @@ class MarketingPipelineService:
 
             # -----------------------------------------------------
             # INVALID
+            #
+            # This remains a guardrail concern.
+            # Do NOT send clearly incompatible requests to an agent.
             # -----------------------------------------------------
 
             if (
                 guardrail_result.decision
                 == GuardrailDecision.INVALID
             ):
+
                 return {
                     "mode": "EXPLICIT_AGENT",
+                    "status": "INVALID",
                     "guardrail": guardrail_result.model_dump(
                         mode="json"
                     ),
                     "intent": {
-                        "type": guardrail_result.detected_intent.value,
-                        "confidence": guardrail_result.confidence,
-                        "reasoning": guardrail_result.reason,
+                        "type": (
+                            guardrail_result
+                            .detected_intent
+                            .value
+                        ),
+                        "confidence": (
+                            guardrail_result.confidence
+                        ),
+                        "reasoning": (
+                            guardrail_result.reason
+                        ),
                     },
                     "plan": None,
                     "orchestration": None,
                 }
 
             # -----------------------------------------------------
-            # NEEDS CLARIFICATION
+            # IMPORTANT
+            #
+            # DO NOT return here for guardrail
+            # NEEDS_CLARIFICATION.
+            #
+            # Gemini Planner must make the clarification decision
+            # because it has access to:
+            #
+            #   - current request
+            #   - brand profile
+            #   - RAG
+            #   - conversation history
+            #
+            # Therefore all clarification is centralized through
+            # Gemini.
             # -----------------------------------------------------
 
-            if (
-                guardrail_result.decision
-                == GuardrailDecision.NEEDS_CLARIFICATION
-            ):
-                return {
-                    "mode": "EXPLICIT_AGENT",
-                    "guardrail": guardrail_result.model_dump(
-                        mode="json"
-                    ),
-                    "intent": {
-                        "type": guardrail_result.detected_intent.value,
-                        "confidence": guardrail_result.confidence,
-                        "reasoning": guardrail_result.reason,
-                    },
-                    "plan": None,
-                    "orchestration": None,
-                }
-
-        # ---------------------------------------------------------
+        # =========================================================
         # 2. Detect intent
-        # ---------------------------------------------------------
+        # =========================================================
 
         intent_result = self.intent_service.detect(
             user_request
         )
 
-        # ---------------------------------------------------------
+        # =========================================================
         # 3. Retrieve user's saved brand profile
-        # ---------------------------------------------------------
+        # =========================================================
 
-        retrieved_brand_profile = self._retrieve_brand_profile(
-            user_id=user_id,
-            existing_brand_profile=brand_profile,
+        retrieved_brand_profile = (
+            self._retrieve_brand_profile(
+                user_id=user_id,
+                existing_brand_profile=brand_profile,
+            )
         )
 
-        # ---------------------------------------------------------
-        # 4. Retrieve user-specific knowledge
-        # ---------------------------------------------------------
+        # =========================================================
+        # 4. Retrieve user-specific knowledge / RAG
+        # =========================================================
 
         retrieved_knowledge = self._retrieve_knowledge(
             user_id=user_id,
@@ -368,24 +463,99 @@ class MarketingPipelineService:
             existing_knowledge=knowledge,
         )
 
-        # ---------------------------------------------------------
-        # 5. Create execution plan
-        # ---------------------------------------------------------
+        # =========================================================
+        # 5. Normalize conversation history
+        # =========================================================
 
-        plan = self.planner_service.create_plan(
-            user_input=user_request,
-            intent=intent_result.intent.value,
+        normalized_history = (
+            self._normalize_conversation_history(
+                conversation_history
+            )
         )
 
-        # ---------------------------------------------------------
-        # 6. Validate execution plan
-        # ---------------------------------------------------------
+        # =========================================================
+        # 6. Gemini Planner
+        # =========================================================
+
+        try:
+
+            plan = self.planner_service.create_plan(
+                user_input=user_request,
+                intent=intent_result.intent.value,
+                brand_profile=retrieved_brand_profile,
+                knowledge=retrieved_knowledge,
+                conversation_history=normalized_history,
+                selected_agent=(
+        selected_agent.value
+        if selected_agent is not None
+        else None),
+            )
+
+        except PlannerClarificationError as exc:
+
+            # -----------------------------------------------------
+            # Gemini decided that more information is required.
+            #
+            # No agent executes.
+            # -----------------------------------------------------
+
+            return {
+                "mode": (
+                    "EXPLICIT_AGENT"
+                    if selected_agent is not None
+                    else "GENERAL"
+                ),
+                "status": "NEEDS_CLARIFICATION",
+                "clarification": {
+                    "question": exc.question,
+                    "questions": exc.questions,
+                },
+                "intent": {
+                    "type": intent_result.intent.value,
+                    "confidence": intent_result.confidence,
+                    "reasoning": intent_result.reasoning,
+                },
+                "brand_profile": {
+                    "loaded": bool(
+                        retrieved_brand_profile
+                    ),
+                    "company_name": (
+                        retrieved_brand_profile.get(
+                            "company_name"
+                        )
+                    ),
+                    "industry": (
+                        retrieved_brand_profile.get(
+                            "industry"
+                        )
+                    ),
+                },
+                "knowledge": {
+                    "retrieved": len(
+                        retrieved_knowledge
+                    ),
+                    "sources": list(
+                        {
+                            item.get("source")
+                            for item in retrieved_knowledge
+                            if isinstance(item, dict)
+                            and item.get("source")
+                        }
+                    ),
+                },
+                "plan": None,
+                "orchestration": None,
+            }
+
+        # =========================================================
+        # 7. Validate execution plan
+        # =========================================================
 
         self.plan_validator.validate(plan)
 
-        # ---------------------------------------------------------
-        # 7. Create shared context
-        # ---------------------------------------------------------
+        # =========================================================
+        # 8. Create shared context
+        # =========================================================
 
         context = self.context_service.create_context(
             user_request=user_request,
@@ -397,29 +567,42 @@ class MarketingPipelineService:
             metadata=metadata,
         )
 
-        # ---------------------------------------------------------
-        # 8. Add explicit-agent information to context
-        # ---------------------------------------------------------
+        # =========================================================
+        # 9. Add pipeline-level context
+        # =========================================================
 
         context_data = context.model_dump()
 
+        # ---------------------------------------------------------
+        # Conversation history
+        # ---------------------------------------------------------
+
+        context_data["conversation_history"] = (
+            normalized_history
+        )
+
+        # ---------------------------------------------------------
+        # Explicit selected agent
+        # ---------------------------------------------------------
+
         if selected_agent is not None:
+
             context_data["selected_agent"] = (
                 selected_agent.value
             )
 
-        # ---------------------------------------------------------
-        # 9. Execute dependency-aware plan
-        # ---------------------------------------------------------
+        # =========================================================
+        # 10. Execute dependency-aware plan
+        # =========================================================
 
         orchestration_result = self.orchestrator.execute(
             plan=plan,
             context=context_data,
         )
 
-        # ---------------------------------------------------------
-        # 10. Return structured result
-        # ---------------------------------------------------------
+        # =========================================================
+        # 11. Return structured result
+        # =========================================================
 
         result = {
             "mode": (
@@ -427,22 +610,31 @@ class MarketingPipelineService:
                 if selected_agent is not None
                 else "GENERAL"
             ),
+            "status": "COMPLETED",
             "intent": {
                 "type": intent_result.intent.value,
                 "confidence": intent_result.confidence,
                 "reasoning": intent_result.reasoning,
             },
             "brand_profile": {
-                "loaded": bool(retrieved_brand_profile),
-                "company_name": retrieved_brand_profile.get(
-                    "company_name"
+                "loaded": bool(
+                    retrieved_brand_profile
                 ),
-                "industry": retrieved_brand_profile.get(
-                    "industry"
+                "company_name": (
+                    retrieved_brand_profile.get(
+                        "company_name"
+                    )
+                ),
+                "industry": (
+                    retrieved_brand_profile.get(
+                        "industry"
+                    )
                 ),
             },
             "knowledge": {
-                "retrieved": len(retrieved_knowledge),
+                "retrieved": len(
+                    retrieved_knowledge
+                ),
                 "sources": list(
                     {
                         item.get("source")
@@ -455,16 +647,19 @@ class MarketingPipelineService:
             "plan": plan.model_dump(
                 mode="json"
             ),
-            "orchestration": orchestration_result.model_dump(
-                mode="json"
+            "orchestration": (
+                orchestration_result.model_dump(
+                    mode="json"
+                )
             ),
         }
 
-        # ---------------------------------------------------------
-        # 11. Include guardrail result when explicit agent used
-        # ---------------------------------------------------------
+        # =========================================================
+        # 12. Include guardrail result when explicit agent used
+        # =========================================================
 
         if guardrail_result is not None:
+
             result["guardrail"] = (
                 guardrail_result.model_dump(
                     mode="json"

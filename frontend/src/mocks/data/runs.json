@@ -1,0 +1,34 @@
+[
+  {
+    "run_id": "run_1",
+    "campaign_id": "campaign_1",
+    "status": "RUNNING",
+    "tasks": [
+      {
+        "id": "research_1",
+        "agent": "research",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "competitor_1",
+        "agent": "competitor",
+        "status": "RUNNING"
+      },
+      {
+        "id": "seo_1",
+        "agent": "seo",
+        "status": "PENDING"
+      },
+      {
+        "id": "content_1",
+        "agent": "content",
+        "status": "BLOCKED"
+      },
+      {
+        "id": "image_1",
+        "agent": "image",
+        "status": "FAILED"
+      }
+    ]
+  }
+]

@@ -4,16 +4,19 @@ from chat.models import (
     conversation_document_to_response,
     message_document_to_response,
 )
+
 from chat.service import (
     ChatService,
     ConversationNotFoundError,
 )
+
 from schemas.chat import (
     ConversationResponse,
     CreateConversationRequest,
     MessageResponse,
     SendMessageRequest,
 )
+
 from services.marketing_pipeline_service import MarketingPipelineService
 from utils.auth import get_current_user
 
@@ -31,6 +34,10 @@ def get_chat_service() -> ChatService:
 def get_marketing_pipeline_service() -> MarketingPipelineService:
     return MarketingPipelineService()
 
+
+# ---------------------------------------------------------
+# Create conversation
+# ---------------------------------------------------------
 
 @router.post(
     "/conversations",
@@ -52,6 +59,10 @@ def create_conversation(
     )
 
 
+# ---------------------------------------------------------
+# Get user's conversations
+# ---------------------------------------------------------
+
 @router.get(
     "/conversations",
     response_model=list[ConversationResponse],
@@ -71,6 +82,91 @@ def get_conversations(
         for conversation in conversations
     ]
 
+
+# ---------------------------------------------------------
+# Rename conversation
+# ---------------------------------------------------------
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ConversationResponse,
+)
+def rename_conversation(
+    conversation_id: str,
+    request: CreateConversationRequest,
+    current_user: dict = Depends(get_current_user),
+    chat_service: ChatService = Depends(get_chat_service),
+):
+    try:
+        conversation = chat_service.rename_conversation(
+            conversation_id=conversation_id,
+            user_id=str(current_user["_id"]),
+            title=request.title,
+        )
+
+    except ConversationNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "success": False,
+                "data": None,
+                "message": str(exc),
+            },
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "success": False,
+                "data": None,
+                "message": str(exc),
+            },
+        ) from exc
+
+    return ConversationResponse(
+        **conversation_document_to_response(conversation)
+    )
+
+
+# ---------------------------------------------------------
+# Delete conversation
+# ---------------------------------------------------------
+
+@router.delete(
+    "/conversations/{conversation_id}",
+)
+def delete_conversation(
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user),
+    chat_service: ChatService = Depends(get_chat_service),
+):
+    try:
+        chat_service.delete_conversation(
+            conversation_id=conversation_id,
+            user_id=str(current_user["_id"]),
+        )
+
+    except ConversationNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "success": False,
+                "data": None,
+                "message": str(exc),
+            },
+        ) from exc
+
+    return {
+        "success": True,
+        "data": None,
+        "message": "Conversation deleted successfully.",
+    }
+
+
+# ---------------------------------------------------------
+# Get conversation messages
+# ---------------------------------------------------------
 
 @router.get(
     "/conversations/{conversation_id}/messages",
@@ -105,6 +201,10 @@ def get_messages(
     ]
 
 
+# ---------------------------------------------------------
+# Send message
+# ---------------------------------------------------------
+
 @router.post(
     "/conversations/{conversation_id}/messages",
     response_model=MessageResponse,
@@ -121,9 +221,9 @@ def send_message(
 ):
     user_id = str(current_user["_id"])
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # 1. Save user message
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     try:
         user_message = chat_service.add_user_message(
@@ -131,6 +231,31 @@ def send_message(
             user_id=user_id,
             content=request.content,
         )
+
+        # Get complete conversation history AFTER saving
+        # the current user message.
+        conversation_messages = chat_service.get_messages(
+            conversation_id=conversation_id,
+            user_id=user_id,
+        )
+
+        conversation_history = []
+
+        for message in conversation_messages:
+            if isinstance(message, dict):
+                role = message.get("role")
+                content = message.get("content")
+            else:
+                role = getattr(message, "role", None)
+                content = getattr(message, "content", None)
+
+            if role and content:
+                conversation_history.append(
+                    {
+                        "role": str(role),
+                        "content": str(content),
+                    }
+                )
 
     except ConversationNotFoundError as exc:
         raise HTTPException(
@@ -142,9 +267,9 @@ def send_message(
             },
         ) from exc
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # 2. Process request through MarketingOS pipeline
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     try:
         pipeline_result = pipeline_service.process_request(
@@ -152,6 +277,7 @@ def send_message(
             conversation_id=conversation_id,
             user_request=request.content,
             selected_agent=request.selected_agent,
+            conversation_history=conversation_history,
         )
 
     except Exception as exc:
@@ -160,24 +286,56 @@ def send_message(
             detail={
                 "success": False,
                 "data": None,
-                "message": (
-                    "Failed to process marketing request."
-                ),
+                "message": "Failed to process marketing request.",
                 "error": str(exc),
             },
         ) from exc
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # 3. Build assistant response
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
-    assistant_content = _build_assistant_response(
-        pipeline_result
-    )
+    clarification = pipeline_result.get("clarification")
+    assistant_content = None
 
-    # ---------------------------------------------------------
+    # Gemini-generated clarification
+    if clarification:
+        questions = clarification.get("questions") or []
+
+        if questions:
+            formatted_questions = "\n".join(
+                f"{index}. {question}"
+                for index, question in enumerate(
+                    questions,
+                    start=1,
+                )
+            )
+
+            assistant_content = (
+                "Before I proceed, I need a little more "
+                "information:\n\n"
+                f"{formatted_questions}"
+            )
+
+        else:
+            question = clarification.get("question")
+
+            if question:
+                assistant_content = (
+                    "Before I proceed, I need a little more "
+                    "information:\n\n"
+                    f"{question}"
+                )
+
+    # Normal pipeline response
+    if assistant_content is None:
+        assistant_content = _build_assistant_response(
+            pipeline_result
+        )
+
+    # -----------------------------------------------------
     # 4. Save assistant response
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     try:
         assistant_message = chat_service.add_assistant_message(
@@ -196,14 +354,18 @@ def send_message(
             },
         ) from exc
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # 5. Return assistant message
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     return MessageResponse(
         **message_document_to_response(assistant_message)
     )
 
+
+# ---------------------------------------------------------
+# Assistant response formatting
+# ---------------------------------------------------------
 
 def _build_assistant_response(
     pipeline_result: dict,
@@ -220,23 +382,18 @@ def _build_assistant_response(
     - failed workflows
     """
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Guardrail response
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
-    guardrail = pipeline_result.get(
-        "guardrail"
-    )
+    guardrail = pipeline_result.get("guardrail")
 
     if guardrail:
-
-        decision = guardrail.get(
-            "decision"
-        )
+        decision = guardrail.get("decision")
 
         agent = guardrail.get(
             "agent",
-            "selected",
+            guardrail.get("selected"),
         )
 
         reason = guardrail.get(
@@ -250,14 +407,12 @@ def _build_assistant_response(
         )
 
         if decision == "INVALID":
-
             return (
                 f"The {agent} agent cannot handle this request.\n\n"
                 f"{reason}"
             )
 
         if decision == "NEEDS_CLARIFICATION":
-
             if missing_information:
                 missing = "\n".join(
                     f"- {item}"
@@ -265,19 +420,19 @@ def _build_assistant_response(
                 )
 
                 return (
-                    f"I need a little more information before "
+                    "I need a little more information before "
                     f"I can use the {agent} agent.\n\n"
                     f"Please provide:\n{missing}"
                 )
 
             return (
-                f"I need a little more information before "
+                "I need a little more information before "
                 f"I can use the {agent} agent."
             )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Normal orchestration response
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     intent = pipeline_result.get(
         "intent",
@@ -318,23 +473,26 @@ def _build_assistant_response(
         "error"
     )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Successful execution
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     if status == "COMPLETED":
 
-        # -----------------------------------------------------
+        # -------------------------------------------------
         # Image provider unavailable
-        # -----------------------------------------------------
+        # -------------------------------------------------
 
         if (
             data.get("status")
             == "IMAGE_PROVIDER_NOT_CONFIGURED"
         ):
             prompt = data.get(
-                "prompt",
-                "",
+                "image_prompt",
+                data.get(
+                    "prompt",
+                    "",
+                ),
             )
 
             return (
@@ -346,9 +504,9 @@ def _build_assistant_response(
                 f"Prompt: {prompt}"
             )
 
-        # -----------------------------------------------------
+        # -------------------------------------------------
         # Content Agent structured response
-        # -----------------------------------------------------
+        # -------------------------------------------------
 
         if (
             intent_type == "CONTENT_GENERATION"
@@ -360,9 +518,9 @@ def _build_assistant_response(
                 summary=summary,
             )
 
-        # -----------------------------------------------------
+        # -------------------------------------------------
         # Generic successful response
-        # -----------------------------------------------------
+        # -------------------------------------------------
 
         if summary:
             return summary
@@ -372,25 +530,28 @@ def _build_assistant_response(
             f"the {intent_type} workflow."
         )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Failed execution
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     if status == "FAILED":
-
         return (
             "I could not complete the requested workflow.\n\n"
             f"Reason: {error or 'Unknown agent error.'}"
         )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Other state
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     return (
         "The marketing workflow could not be completed."
     )
 
+
+# ---------------------------------------------------------
+# Content response formatter
+# ---------------------------------------------------------
 
 def _format_content_response(
     data: dict,
@@ -425,36 +586,36 @@ def _format_content_response(
 
     sections = []
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Campaign Hook
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     if campaign_hook:
         sections.append(
             f"### Campaign Hook\n{campaign_hook}"
         )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Caption
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     if caption:
         sections.append(
             f"### Caption\n{caption}"
         )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # CTA
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     if cta:
         sections.append(
             f"### Call to Action\n{cta}"
         )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Hashtags
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     if hashtags:
         formatted_hashtags = " ".join(
@@ -466,9 +627,9 @@ def _format_content_response(
             f"### Hashtags\n{formatted_hashtags}"
         )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Strategy
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     if strategy:
         formatted_strategy = "\n".join(
@@ -480,9 +641,9 @@ def _format_content_response(
             f"### Strategy\n{formatted_strategy}"
         )
 
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
     # Fallback
-    # ---------------------------------------------------------
+    # -----------------------------------------------------
 
     if sections:
         return "\n\n".join(sections)

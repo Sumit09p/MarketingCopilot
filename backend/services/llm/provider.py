@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from google import genai
 
@@ -342,48 +343,80 @@ class GeminiProvider(LLMProvider):
         system_prompt: str | None = None,
     ) -> str:
 
-        try:
-            full_prompt = prompt
+        full_prompt = prompt
 
-            if system_prompt:
-                full_prompt = (
-                    f"{system_prompt}\n\n"
-                    f"User/Task:\n{prompt}"
-                )
-
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=full_prompt,
+        if system_prompt:
+            full_prompt = (
+                f"{system_prompt}\n\n"
+                f"User/Task:\n{prompt}"
             )
 
-            text = getattr(response, "text", None)
+        max_attempts = 3
+        retryable_status_codes = {429, 500, 502, 503, 504}
 
-            if not text:
-                raise LLMProviderError(
-                    "Gemini returned an empty response."
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=full_prompt,
                 )
 
-            return text
+                text = getattr(response, "text", None)
 
-        except LLMProviderError:
-            raise
+                if not text:
+                    raise LLMProviderError(
+                        "Gemini returned an empty response."
+                    )
 
-        except Exception as exc:
-            raise LLMProviderError(
-                f"Gemini generation failed: {exc}"
-            ) from exc
+                return text
+
+            except LLMProviderError:
+                raise
+
+            except Exception as exc:
+                status_code = getattr(exc, "status_code", None)
+
+                if status_code is None:
+                    status_code = getattr(exc, "code", None)
+
+                if (
+                    status_code in retryable_status_codes
+                    and attempt < max_attempts
+                ):
+                    delay = 2 ** (attempt - 1)
+                    time.sleep(delay)
+                    continue
+
+                raise LLMProviderError(
+                    f"Gemini generation failed: {exc}"
+                ) from exc
+
+        raise LLMProviderError(
+            "Gemini generation failed after all retry attempts."
+        )
 
 
 class LLMService:
     """
     High-level LLM service.
 
-    Default provider is MockLLMProvider so the project works locally
-    without external API keys.
+    Selects the configured provider:
+    - gemini -> GeminiProvider
+    - anything else / unset -> MockLLMProvider
     """
 
     def __init__(self, provider: LLMProvider | None = None) -> None:
-        self.provider = provider or MockLLMProvider()
+        if provider is not None:
+            self.provider = provider
+            return
+
+        settings = get_settings()
+        configured_provider = (settings.LLM_PROVIDER or "mock").lower().strip()
+
+        if configured_provider == "gemini":
+            self.provider = GeminiProvider()
+        else:
+            self.provider = MockLLMProvider()
 
     def generate(self, request: LLMRequest) -> LLMResponse:
         content = self.provider.generate(
