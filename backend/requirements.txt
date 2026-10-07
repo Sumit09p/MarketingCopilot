@@ -6,3 +6,10 @@ pydantic-settings
 sentence-transformers
 faiss-cpu
 numpy
+bcrypt
+PyJWT
+email-validator
+google-genai
+PyMuPDF
+python-docx
+python-multipart

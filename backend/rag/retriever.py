@@ -67,6 +67,11 @@ class SemanticRetriever:
         # Inner product on normalized vectors = cosine similarity.
         self._index = faiss.IndexFlatIP(dimension)
 
+    @property
+    def chunk_count(self) -> int:
+        """Return the number of indexed chunks."""
+        return len(self._chunks)
+
     def _chunk_text(self, text: str) -> list[str]:
         """
         Split a document into overlapping word-based chunks.
