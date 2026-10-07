@@ -4,7 +4,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from intent.schemas import IntentType
+from backend.intent.schemas import IntentType
 
 
 class GuardrailDecision(str, Enum):

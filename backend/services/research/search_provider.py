@@ -5,7 +5,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from config.settings import get_settings
+from backend.config.settings import get_settings
 
 
 class SearchProvider:

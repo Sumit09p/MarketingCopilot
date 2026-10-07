@@ -2,30 +2,30 @@
 
 from typing import Any, Callable
 
-from agents.adapter import AgentAdapter
-from agents.llm_adapter import build_agent_generator
-from agents.registry import build_registry
+from backend.agents.adapter import AgentAdapter
+from backend.agents.llm_adapter import build_agent_generator
+from backend.agents.registry import build_registry
 
-from context.service import SharedContextService
+from backend.context.service import SharedContextService
 
-from guardrails.schemas import AgentType, GuardrailDecision
-from guardrails.service import AgentGuardrailService
+from backend.guardrails.schemas import AgentType, GuardrailDecision
+from backend.guardrails.service import AgentGuardrailService
 
-from intent.service import IntentDetectionService
+from backend.intent.service import IntentDetectionService
 
-from orchestrator.service import OrchestratorService
+from backend.orchestrator.service import OrchestratorService
 
-from planner.service import (
+from backend.planner.service import (
     PlannerClarificationError,
     PlannerService,
 )
 
-from planner.validator import PlanValidator
+from backend.planner.validator import PlanValidator
 
-from services.agent_run_service import AgentRunService
-from services.brand_profile_service import BrandProfileService
-from services.knowledge_service import KnowledgeService
-from services.llm import LLMService
+from backend.services.agent_run_service import AgentRunService
+from backend.services.brand_profile_service import BrandProfileService
+from backend.services.knowledge_service import KnowledgeService
+from backend.services.llm import LLMService
 
 
 class MarketingPipelineService:

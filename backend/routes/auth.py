@@ -1,23 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from models.user import user_document_to_response
-from schemas.auth import (
+from backend.models.user import user_document_to_response
+from backend.schemas.auth import (
     AuthData,
     AuthResponse,
     LoginRequest,
     RegisterRequest,
     UserResponse,
 )
-from services.auth_service import (
+from backend.services.auth_service import (
     AuthService,
     AuthenticationError,
     EmailAlreadyExistsError,
 )
-from services.jwt_service import (
+from backend.services.jwt_service import (
     JWTNotConfiguredError,
     create_access_token,
 )
-from utils.auth import get_current_user
+from backend.utils.auth import get_current_user
 
 
 router = APIRouter(

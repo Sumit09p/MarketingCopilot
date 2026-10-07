@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from agents.base import BaseAgent
-from planner.schemas import PlannerTask
+from backend.agents.base import BaseAgent
+from backend.planner.schemas import PlannerTask
 
 
 class AgentAdapter:

@@ -5,9 +5,9 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from models.user import user_document_to_response
-from services.auth_service import AuthService, AuthenticationError
-from services.jwt_service import (
+from backend.models.user import user_document_to_response
+from backend.services.auth_service import AuthService, AuthenticationError
+from backend.services.jwt_service import (
     InvalidTokenError,
     JWTNotConfiguredError,
     decode_access_token,

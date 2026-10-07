@@ -1,24 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from chat.models import (
+from backend.chat.models import (
     conversation_document_to_response,
     message_document_to_response,
 )
 
-from chat.service import (
+from backend.chat.service import (
     ChatService,
     ConversationNotFoundError,
 )
 
-from schemas.chat import (
+from backend.schemas.chat import (
     ConversationResponse,
     CreateConversationRequest,
     MessageResponse,
     SendMessageRequest,
 )
 
-from services.marketing_pipeline_service import MarketingPipelineService
-from utils.auth import get_current_user
+from backend.services.marketing_pipeline_service import MarketingPipelineService
+from backend.utils.auth import get_current_user
 
 
 router = APIRouter(

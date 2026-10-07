@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from models.user import user_document_to_response
-from schemas.user import (
+from backend.models.user import user_document_to_response
+from backend.schemas.user import (
     UpdateUserProfileRequest,
     UserProfileResponse,
 )
-from services.user_profile_service import (
+from backend.services.user_profile_service import (
     UserNotFoundError,
     UserProfileService,
 )
-from utils.auth import get_current_user
+from backend.utils.auth import get_current_user
 
 
 router = APIRouter(

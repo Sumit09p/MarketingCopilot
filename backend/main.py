@@ -1,10 +1,10 @@
 # from fastapi import FastAPI, HTTPException
 # from fastapi.responses import JSONResponse
-# from routes.users import router as users_router
-# from routes.auth import router as auth_router
-# from routes.chat import router as chat_router
-# from routes.knowledge import router as knowledge_router
-# from routes.brand_profile import router as brand_profile_router
+# from backend.routes.users import router as users_router
+# from backend.routes.auth import router as auth_router
+# from backend.routes.chat import router as chat_router
+# from backend.routes.knowledge import router as knowledge_router
+# from backend.routes.brand_profile import router as brand_profile_router
 
 
 # app = FastAPI(
@@ -53,11 +53,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes.users import router as users_router
-from routes.auth import router as auth_router
-from routes.chat import router as chat_router
-from routes.knowledge import router as knowledge_router
-from routes.brand_profile import router as brand_profile_router
+from backend.routes.users import router as users_router
+from backend.routes.auth import router as auth_router
+from backend.routes.chat import router as chat_router
+from backend.routes.knowledge import router as knowledge_router
+from backend.routes.brand_profile import router as brand_profile_router
 
 
 app = FastAPI(
@@ -78,6 +78,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -128,3 +130,4 @@ def health_check():
         "status": "ok",
         "service": "MarketingOS AI Backend",
     }
+

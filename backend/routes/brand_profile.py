@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from schemas.brand_profile import (
+from backend.schemas.brand_profile import (
     BrandProfileCreate,
     BrandProfileResponse,
     BrandProfileUpdate,
 )
-from services.brand_profile_service import (
+from backend.services.brand_profile_service import (
     BrandProfileNotFoundError,
     BrandProfileService,
 )
-from utils.auth import get_current_user
+from backend.utils.auth import get_current_user
 
 
 router = APIRouter(

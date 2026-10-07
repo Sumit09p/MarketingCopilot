@@ -4,12 +4,12 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from orchestrator.schemas import (
+from backend.orchestrator.schemas import (
     OrchestrationResult,
     TaskExecution,
     TaskStatus,
 )
-from planner.schemas import ExecutionPlan, PlannerTask
+from backend.planner.schemas import ExecutionPlan, PlannerTask
 
 
 class OrchestrationError(Exception):

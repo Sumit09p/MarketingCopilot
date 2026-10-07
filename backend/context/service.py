@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from context.schemas import SharedContext
+from backend.context.schemas import SharedContext
 
 
 class SharedContextService:

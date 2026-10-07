@@ -93,3 +93,4 @@ def get_settings() -> Settings:
 def reset_settings_cache() -> None:
     """Clear the cached settings instance. Intended for tests."""
     get_settings.cache_clear()
+

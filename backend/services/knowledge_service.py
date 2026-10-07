@@ -6,9 +6,9 @@ from typing import Any
 
 from bson import ObjectId
 
-from database import get_database
-from knowledge.ingestion import DocumentIngestionService
-from rag.retriever import SemanticRetriever
+from backend.database import get_database
+from backend.knowledge.ingestion import DocumentIngestionService
+from backend.rag.retriever import SemanticRetriever
 
 
 DOCUMENTS_COLLECTION = "documents"
@@ -303,3 +303,4 @@ class KnowledgeService:
             "created_at": document["created_at"],
             "updated_at": document["updated_at"],
         }
+

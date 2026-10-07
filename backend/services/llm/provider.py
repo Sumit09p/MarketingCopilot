@@ -5,9 +5,9 @@ import time
 
 from google import genai
 
-from config import get_settings
-from services.llm.base import LLMProvider
-from services.llm.schemas import LLMRequest, LLMResponse
+from backend.config import get_settings
+from backend.services.llm.base import LLMProvider
+from backend.services.llm.schemas import LLMRequest, LLMResponse
 
 
 class LLMConfigurationError(Exception):
@@ -428,3 +428,4 @@ class LLMService:
             content=content,
             provider=self.provider.__class__.__name__,
         )
+

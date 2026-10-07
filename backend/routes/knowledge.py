@@ -5,15 +5,15 @@ from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from schemas.knowledge import (
+from backend.schemas.knowledge import (
     KnowledgeDocumentResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
     KnowledgeSearchResult,
     KnowledgeStatsResponse,
 )
-from services.knowledge_service import KnowledgeService
-from utils.auth import get_current_user
+from backend.services.knowledge_service import KnowledgeService
+from backend.utils.auth import get_current_user
 
 
 router = APIRouter(

@@ -1,7 +1,7 @@
 """Adapter between the central LLM service and marketing agents."""
 
-from services.llm import LLMService
-from services.llm.schemas import LLMRequest
+from backend.services.llm import LLMService
+from backend.services.llm.schemas import LLMRequest
 
 
 def build_agent_generator(

@@ -1,3 +1,3 @@
-from services.llm.provider import LLMService
+from backend.services.llm.provider import LLMService
 
 __all__ = ["LLMService"]

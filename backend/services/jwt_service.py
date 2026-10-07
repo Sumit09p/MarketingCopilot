@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import jwt
 from jwt.exceptions import PyJWTError
 
-from config import get_settings
+from backend.config import get_settings
 
 
 ALGORITHM = "HS256"
@@ -64,3 +64,4 @@ def decode_access_token(token: str) -> str:
         raise InvalidTokenError("Invalid or expired token.")
 
     return user_id
+

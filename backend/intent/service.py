@@ -1,6 +1,6 @@
 """Service for detecting high-level user intent."""
 
-from intent.schemas import IntentResult, IntentType
+from backend.intent.schemas import IntentResult, IntentType
 
 
 class IntentDetectionError(Exception):

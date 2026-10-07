@@ -28,3 +28,4 @@ def get_agent(name: str, generate: GenerateFn):
     if agent is None:
         raise KeyError(f"Unknown agent '{name}'. Known agents: {', '.join(registry)}.")
     return agent
+

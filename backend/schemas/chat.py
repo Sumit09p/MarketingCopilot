@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from guardrails.schemas import AgentType
+from backend.guardrails.schemas import AgentType
 
 
 class CreateConversationRequest(BaseModel):

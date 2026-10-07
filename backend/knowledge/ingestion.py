@@ -6,7 +6,7 @@ from typing import Any
 import fitz
 from docx import Document
 
-from rag.retriever import SemanticRetriever
+from backend.rag.retriever import SemanticRetriever
 
 
 class DocumentIngestionService:
@@ -187,3 +187,4 @@ class DocumentIngestionService:
             "documents": self.retriever.document_count,
             "chunks": self.retriever.chunk_count,
         }
+

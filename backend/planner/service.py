@@ -6,14 +6,14 @@ import json
 import re
 from typing import Any
 
-from planner.schemas import (
+from backend.planner.schemas import (
     ExecutionPlan,
     PlannerDecision,
     PlannerTask,
 )
 
-from services.llm import LLMService
-from services.llm.schemas import LLMRequest
+from backend.services.llm import LLMService
+from backend.services.llm.schemas import LLMRequest
 
 
 class PlannerClarificationError(Exception):

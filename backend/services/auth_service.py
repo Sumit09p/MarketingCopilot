@@ -4,9 +4,9 @@ from typing import Any
 from bson import ObjectId
 from bson.errors import InvalidId
 
-from database import get_database
-from models.user import build_user_document, USERS_COLLECTION
-from services.password_service import hash_password, verify_password
+from backend.database import get_database
+from backend.models.user import build_user_document, USERS_COLLECTION
+from backend.services.password_service import hash_password, verify_password
 
 
 class EmailAlreadyExistsError(Exception):
@@ -103,3 +103,4 @@ class AuthService:
         return self.users.find_one(
             {"_id": object_id}
         )
+

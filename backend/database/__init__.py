@@ -1,6 +1,6 @@
 """Backend database package."""
 
-from database.mongodb import (
+from backend.database.mongodb import (
     DatabaseConnectionError,
     DatabaseNotConfiguredError,
     close_mongo_client,
@@ -19,3 +19,4 @@ __all__ = [
     "ping_database",
     "reset_mongo_client",
 ]
+

@@ -4,13 +4,13 @@ from typing import Any
 from bson import ObjectId
 from bson.errors import InvalidId
 
-from chat.models import (
+from backend.chat.models import (
     CONVERSATIONS_COLLECTION,
     MESSAGES_COLLECTION,
     build_conversation_document,
     build_message_document,
 )
-from database import get_database
+from backend.database import get_database
 
 
 class ConversationNotFoundError(Exception):
@@ -240,3 +240,4 @@ class ChatService:
                 }
             ).sort("created_at", 1)
         )
+

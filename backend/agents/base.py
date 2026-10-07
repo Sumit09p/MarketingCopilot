@@ -85,3 +85,4 @@ class BaseAgent:
         if not isinstance(parsed, dict):
             raise ValueError("LLM JSON must be an object.")
         return parsed
+

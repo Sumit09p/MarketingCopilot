@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from planner.schemas import PlannerTask
+from backend.planner.schemas import PlannerTask
 
 
 class TaskStatus(str, Enum):

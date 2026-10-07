@@ -1,5 +1,6 @@
 """Backend configuration package."""
 
-from config.settings import Settings, get_settings, reset_settings_cache
+from backend.config.settings import Settings, get_settings, reset_settings_cache
 
 __all__ = ["Settings", "get_settings", "reset_settings_cache"]
+

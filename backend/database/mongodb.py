@@ -6,7 +6,7 @@ from pymongo import MongoClient
 from pymongo.database import Database
 from pymongo.errors import ConfigurationError, ConnectionFailure, ServerSelectionTimeoutError
 
-from config import get_settings
+from backend.config import get_settings
 
 MONGODB_CLIENT_OPTIONS: dict[str, int] = {
     "serverSelectionTimeoutMS": 5000,
@@ -77,3 +77,5 @@ def close_mongo_client() -> None:
 def reset_mongo_client() -> None:
     """Reset the shared client. Intended for tests."""
     close_mongo_client()
+
+

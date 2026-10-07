@@ -1,12 +1,12 @@
 """Service for validating requests against selected agents."""
 
-from guardrails.schemas import (
+from backend.guardrails.schemas import (
     AgentType,
     GuardrailDecision,
     GuardrailResult,
 )
-from intent.schemas import IntentType
-from intent.service import IntentDetectionError, IntentDetectionService
+from backend.intent.schemas import IntentType
+from backend.intent.service import IntentDetectionError, IntentDetectionService
 
 
 class GuardrailEvaluationError(Exception):

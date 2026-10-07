@@ -1,6 +1,6 @@
 """Validation logic for planner execution plans."""
 
-from planner.schemas import ExecutionPlan
+from backend.planner.schemas import ExecutionPlan
 
 
 class PlanValidationError(Exception):

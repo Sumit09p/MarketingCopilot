@@ -3,8 +3,8 @@ from typing import Any
 
 from bson import ObjectId
 
-from database import get_database
-from models.brand_profile import (
+from backend.database import get_database
+from backend.models.brand_profile import (
     BRAND_PROFILES_COLLECTION,
     brand_profile_to_response,
 )
@@ -245,3 +245,4 @@ class BrandProfileService:
             )
 
         return True
+

@@ -3,8 +3,8 @@ from typing import Any
 
 from bson import ObjectId
 
-from database import get_database
-from models.user import USERS_COLLECTION
+from backend.database import get_database
+from backend.models.user import USERS_COLLECTION
 
 
 class UserNotFoundError(Exception):
@@ -58,3 +58,4 @@ class UserProfileService:
             raise UserNotFoundError("User not found.")
 
         return result
+

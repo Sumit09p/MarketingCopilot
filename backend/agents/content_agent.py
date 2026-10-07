@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from .base import AgentResult, BaseAgent
-from prompts.content_prompt import CONTENT_GENERATION_PROMPT
+from backend.prompts.content_prompt import CONTENT_GENERATION_PROMPT
 
 
 REQUIRED_INPUTS = (
@@ -717,3 +717,4 @@ def _detect_tone(
         return "Friendly"
 
     return "Engaging"
+

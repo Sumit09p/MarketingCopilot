@@ -4,7 +4,7 @@ import json
 from typing import Any, Optional
 
 from .base import AgentResult, BaseAgent
-from services.research.search_provider import SearchProvider
+from backend.services.research.search_provider import SearchProvider
 
 
 RESEARCH_PROMPT = """
