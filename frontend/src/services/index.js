@@ -1,3 +1,4 @@
+import * as aiLive from "./ai.service";
 import * as authLive from "./auth.service";
 import * as chatLive from "./chat.service";
 import * as conversationsLive from "./conversations.service";
@@ -34,3 +35,4 @@ export const knowledgeService = useMockApi ? knowledgeMock : knowledgeLive;
 export const analyticsService = useMockApi ? analyticsMock : analyticsLive;
 export const calendarService = useMockApi ? calendarMock : calendarLive;
 export const integrationsService = useMockApi ? integrationsMock : integrationsLive;
+export const aiService = aiLive;
