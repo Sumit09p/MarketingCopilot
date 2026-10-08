@@ -17,7 +17,10 @@ from backend.schemas.chat import (
     SendMessageRequest,
 )
 
-from backend.services.marketing_pipeline_service import MarketingPipelineService
+from backend.services.marketing_pipeline_service import (
+    MarketingPipelineService,
+)
+
 from backend.utils.auth import get_current_user
 
 
@@ -35,9 +38,10 @@ def get_marketing_pipeline_service() -> MarketingPipelineService:
     return MarketingPipelineService()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # Create conversation
-# ---------------------------------------------------------
+# =========================================================
+
 
 @router.post(
     "/conversations",
@@ -59,9 +63,10 @@ def create_conversation(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # Get user's conversations
-# ---------------------------------------------------------
+# =========================================================
+
 
 @router.get(
     "/conversations",
@@ -83,9 +88,10 @@ def get_conversations(
     ]
 
 
-# ---------------------------------------------------------
+# =========================================================
 # Rename conversation
-# ---------------------------------------------------------
+# =========================================================
+
 
 @router.patch(
     "/conversations/{conversation_id}",
@@ -129,9 +135,10 @@ def rename_conversation(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # Delete conversation
-# ---------------------------------------------------------
+# =========================================================
+
 
 @router.delete(
     "/conversations/{conversation_id}",
@@ -164,9 +171,10 @@ def delete_conversation(
     }
 
 
-# ---------------------------------------------------------
+# =========================================================
 # Get conversation messages
-# ---------------------------------------------------------
+# =========================================================
+
 
 @router.get(
     "/conversations/{conversation_id}/messages",
@@ -201,9 +209,10 @@ def get_messages(
     ]
 
 
-# ---------------------------------------------------------
-# Send message
-# ---------------------------------------------------------
+# =========================================================
+# Send message inside a MongoDB conversation
+# =========================================================
+
 
 @router.post(
     "/conversations/{conversation_id}/messages",
@@ -232,8 +241,6 @@ def send_message(
             content=request.content,
         )
 
-        # Get complete conversation history AFTER saving
-        # the current user message.
         conversation_messages = chat_service.get_messages(
             conversation_id=conversation_id,
             user_id=user_id,
@@ -246,8 +253,16 @@ def send_message(
                 role = message.get("role")
                 content = message.get("content")
             else:
-                role = getattr(message, "role", None)
-                content = getattr(message, "content", None)
+                role = getattr(
+                    message,
+                    "role",
+                    None,
+                )
+                content = getattr(
+                    message,
+                    "content",
+                    None,
+                )
 
             if role and content:
                 conversation_history.append(
@@ -268,7 +283,7 @@ def send_message(
         ) from exc
 
     # -----------------------------------------------------
-    # 2. Process request through MarketingOS pipeline
+    # 2. Process request through Marketing Pipeline
     # -----------------------------------------------------
 
     try:
@@ -281,13 +296,32 @@ def send_message(
         )
 
     except Exception as exc:
+        message = str(exc)
+
+        if (
+            "429" in message
+            or "RESOURCE_EXHAUSTED" in message
+            or "quota" in message.lower()
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "success": False,
+                    "data": None,
+                    "message": (
+                        "AI service is temporarily unavailable "
+                        "because the Gemini API quota has been reached."
+                    ),
+                },
+            ) from exc
+
         raise HTTPException(
             status_code=500,
             detail={
                 "success": False,
                 "data": None,
                 "message": "Failed to process marketing request.",
-                "error": str(exc),
+                "error": message,
             },
         ) from exc
 
@@ -298,7 +332,6 @@ def send_message(
     clarification = pipeline_result.get("clarification")
     assistant_content = None
 
-    # Gemini-generated clarification
     if clarification:
         questions = clarification.get("questions") or []
 
@@ -327,7 +360,6 @@ def send_message(
                     f"{question}"
                 )
 
-    # Normal pipeline response
     if assistant_content is None:
         assistant_content = _build_assistant_response(
             pipeline_result
@@ -363,9 +395,212 @@ def send_message(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
+# Direct specialist-agent chat
+# =========================================================
+
+
+@router.post(
+    "/agent",
+)
+def send_agent_message(
+    request: SendMessageRequest,
+    pipeline_service: MarketingPipelineService = Depends(
+        get_marketing_pipeline_service
+    ),
+):
+    """
+    Execute a selected marketing agent directly.
+
+    This endpoint does NOT require:
+        - authentication
+        - MongoDB conversation
+        - conversation persistence
+
+    It is used by the PRISM frontend for direct specialist-agent
+    interaction.
+    """
+
+    # -----------------------------------------------------
+    # 1. Validate selected agent
+    # -----------------------------------------------------
+
+    if request.selected_agent is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "success": False,
+                "data": None,
+                "message": "Please select a marketing agent.",
+            },
+        )
+
+    # -----------------------------------------------------
+    # 2. Execute Marketing Pipeline
+    # -----------------------------------------------------
+
+    try:
+        pipeline_result = pipeline_service.process_request(
+            user_request=request.content,
+            user_id=None,
+            conversation_id=None,
+            selected_agent=request.selected_agent,
+            conversation_history=[],
+        )
+
+    except Exception as exc:
+        message = str(exc)
+
+        # -------------------------------------------------
+        # Gemini quota / rate-limit handling
+        # -------------------------------------------------
+
+        if (
+            "429" in message
+            or "RESOURCE_EXHAUSTED" in message
+            or "quota" in message.lower()
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "success": False,
+                    "data": None,
+                    "message": (
+                        "AI service is temporarily unavailable "
+                        "because the Gemini API quota has been reached."
+                    ),
+                },
+            ) from exc
+
+        # -------------------------------------------------
+        # Other pipeline errors
+        # -------------------------------------------------
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "data": None,
+                "message": (
+                    "Failed to process the marketing agent request."
+                ),
+                "error": message,
+            },
+        ) from exc
+
+    # -----------------------------------------------------
+    # 3. Gemini requested clarification
+    # -----------------------------------------------------
+
+    if pipeline_result.get("status") == "NEEDS_CLARIFICATION":
+        clarification = (
+            pipeline_result.get("clarification")
+            or {}
+        )
+
+        question = (
+            clarification.get("question")
+            or "I need more information before continuing."
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "content": question,
+                "guardrail": "NEEDS_CLARIFICATION",
+                "question": question,
+                "pipeline": pipeline_result,
+            },
+            "message": "Additional information is required.",
+        }
+
+    # -----------------------------------------------------
+    # 4. Handle failed agent execution
+    # -----------------------------------------------------
+
+    orchestration = pipeline_result.get(
+        "orchestration",
+        {}
+    )
+
+    final_result = orchestration.get(
+        "final_result",
+        {}
+    )
+
+    final_status = final_result.get(
+        "status"
+    )
+
+    final_error = str(
+        final_result.get(
+            "error",
+            ""
+        )
+    )
+
+    if (
+        final_status == "FAILED"
+        and (
+            "429" in final_error
+            or "RESOURCE_EXHAUSTED" in final_error
+            or "quota" in final_error.lower()
+        )
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "success": False,
+                "data": None,
+                "message": (
+                    "AI service is temporarily unavailable "
+                    "because the Gemini API quota has been reached."
+                ),
+            },
+        )
+
+    # -----------------------------------------------------
+    # 5. Agent guardrail rejected request
+    # -----------------------------------------------------
+
+    if pipeline_result.get("status") == "INVALID":
+        content = _build_assistant_response(
+            pipeline_result
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "content": content,
+                "guardrail": "INVALID",
+                "question": None,
+                "pipeline": pipeline_result,
+            },
+            "message": "Request rejected by agent guardrail.",
+        }
+
+    # -----------------------------------------------------
+    # 6. Normal agent execution
+    # -----------------------------------------------------
+
+    return {
+        "success": True,
+        "data": {
+            "content": _build_assistant_response(
+                pipeline_result
+            ),
+            "guardrail": "VALID",
+            "question": None,
+            "pipeline": pipeline_result,
+        },
+        "message": "Marketing agent executed successfully.",
+    }
+
+
+# =========================================================
 # Assistant response formatting
-# ---------------------------------------------------------
+# =========================================================
+
 
 def _build_assistant_response(
     pipeline_result: dict,
@@ -549,9 +784,10 @@ def _build_assistant_response(
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # Content response formatter
-# ---------------------------------------------------------
+# =========================================================
+
 
 def _format_content_response(
     data: dict,

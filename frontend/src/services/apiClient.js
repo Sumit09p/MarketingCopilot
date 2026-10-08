@@ -43,14 +43,15 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const message =
-      payload?.message ||
-      (response.status === 401
+        payload?.message ||
+        payload?.detail?.message ||
+        (response.status === 401
         ? "Authentication required"
         : response.status === 403
-          ? "Permission denied"
-          : response.status === 422
-            ? "Validation error"
-            : `Request failed (${response.status})`);
+        ? "Permission denied"
+        : response.status === 422
+        ? "Validation error"
+        : `Request failed (${response.status})`);
 
     throw new ApiError(message, { status: response.status, data: payload });
   }

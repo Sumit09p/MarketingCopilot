@@ -6,14 +6,18 @@ import MessageList from "../components/chat/MessageList";
 import { ApiError } from "../services/apiClient";
 import {
   aiService,
-  chatService,
+  agentService,
   conversationsService,
 } from "../services";
 import { getUserFacingError } from "../utils/errors";
 
 function titleFromMessage(text) {
   const trimmed = text.trim().replace(/\s+/g, " ");
-  if (trimmed.length <= 48) return trimmed;
+
+  if (trimmed.length <= 48) {
+    return trimmed;
+  }
+
   return `${trimmed.slice(0, 45)}...`;
 }
 
@@ -34,11 +38,14 @@ export default function ChatPage() {
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [failedAttempt, setFailedAttempt] = useState(null);
+
   const loadToken = useRef(0);
 
   const refreshConversations = useCallback(async () => {
     const items = await conversationsService.listConversations();
+
     setConversations(items);
+
     return items;
   }, []);
 
@@ -78,15 +85,21 @@ export default function ChatPage() {
     setMessagesLoading(true);
 
     try {
-      const detail = await conversationsService.getConversation(id);
+      const detail =
+        await conversationsService.getConversation(id);
 
-      if (token !== loadToken.current) return;
+      if (token !== loadToken.current) {
+        return;
+      }
 
       setMessages(detail.messages ?? []);
     } catch (err) {
-      if (token !== loadToken.current) return;
+      if (token !== loadToken.current) {
+        return;
+      }
 
       setMessages([]);
+
       setError(
         getUserFacingError(
           err,
@@ -112,7 +125,9 @@ export default function ChatPage() {
   }
 
   async function ensureConversation(text) {
-    if (activeId) return activeId;
+    if (activeId) {
+      return activeId;
+    }
 
     const created =
       await conversationsService.createConversation({
@@ -141,7 +156,9 @@ export default function ChatPage() {
   async function send(text, { isRetry = false } = {}) {
     const message = text.trim();
 
-    if (!message || sending) return;
+    if (!message || sending) {
+      return;
+    }
 
     setError("");
     setSending(true);
@@ -164,9 +181,10 @@ export default function ChatPage() {
     try {
       /*
        * -----------------------------------------------------
-       * REAL GEMINI CHAT
+       * REAL GEMINI GENERAL CHAT
        * -----------------------------------------------------
        * Normal chat goes directly to Gemini.
+       *
        * This does NOT require MongoDB.
        */
       if (!agent) {
@@ -186,25 +204,32 @@ export default function ChatPage() {
         ]);
 
         setFailedAttempt(null);
+
         return;
       }
 
       /*
        * -----------------------------------------------------
-       * EXISTING SPECIALIST AGENT FLOW
+       * LIVE SPECIALIST AGENT FLOW
        * -----------------------------------------------------
-       * Kept unchanged for future integration.
+       * Specialist agents use the direct backend endpoint:
+       *
+       * POST /api/chat/agent
+       *
+       * This path does NOT require MongoDB conversation
+       * persistence.
        */
-      const conversationId =
-        await ensureConversation(message);
-
       const result =
-        await chatService.sendAgentMessage({
-          agent,
-          message,
-          conversation_id: conversationId,
+        await agentService.sendAgentMessage({
+          content: message,
+          selected_agent: agent,
         });
 
+      /*
+       * -----------------------------------------------------
+       * Agent needs clarification
+       * -----------------------------------------------------
+       */
       if (
         result?.guardrail ===
         "NEEDS_CLARIFICATION"
@@ -216,6 +241,7 @@ export default function ChatPage() {
             role: "assistant",
             content:
               result.question ||
+              result.content ||
               "Could you provide a bit more detail?",
             created_at:
               new Date().toISOString(),
@@ -223,17 +249,53 @@ export default function ChatPage() {
         ]);
 
         setFailedAttempt(null);
+
         return;
       }
 
-      const detail =
-        await conversationsService.getConversation(
-          conversationId
-        );
+      /*
+       * -----------------------------------------------------
+       * Agent rejected the request
+       * -----------------------------------------------------
+       */
+      if (
+        result?.guardrail ===
+        "INVALID"
+      ) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: nextLocalId("invalid"),
+            role: "assistant",
+            content:
+              result.content ||
+              "This request is not compatible with the selected agent.",
+            created_at:
+              new Date().toISOString(),
+          },
+        ]);
 
-      setMessages(detail.messages ?? []);
+        setFailedAttempt(null);
 
-      await refreshConversations();
+        return;
+      }
+
+      /*
+       * -----------------------------------------------------
+       * Normal specialist-agent response
+       * -----------------------------------------------------
+       */
+      setMessages((current) => [
+        ...current,
+        {
+          id: nextLocalId("agent"),
+          role: "assistant",
+          content:
+            result?.content ||
+            "The selected marketing agent completed the request.",
+          created_at: new Date().toISOString(),
+        },
+      ]);
 
       setFailedAttempt(null);
     } catch (err) {
@@ -245,6 +307,11 @@ export default function ChatPage() {
         agent,
       });
 
+      /*
+       * -----------------------------------------------------
+       * Agent guardrail error
+       * -----------------------------------------------------
+       */
       if (
         err instanceof ApiError &&
         err.data?.guardrail === "INVALID"
@@ -283,7 +350,9 @@ export default function ChatPage() {
   async function saveRename(conversationId) {
     const title = renameValue.trim();
 
-    if (!title) return;
+    if (!title) {
+      return;
+    }
 
     try {
       const updated =
@@ -319,7 +388,9 @@ export default function ChatPage() {
       `Delete “${conversation.title}”? This cannot be undone.`
     );
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
     try {
       await conversationsService.deleteConversation(
@@ -412,7 +483,9 @@ export default function ChatPage() {
                 onClick={() =>
                   send(
                     failedAttempt.text,
-                    { isRetry: true }
+                    {
+                      isRetry: true,
+                    }
                   )
                 }
               >

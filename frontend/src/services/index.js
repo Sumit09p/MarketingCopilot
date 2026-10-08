@@ -1,4 +1,5 @@
 import * as aiLive from "./ai.service";
+import * as agentLive from "./agent.service";
 import * as authLive from "./auth.service";
 import * as chatLive from "./chat.service";
 import * as conversationsLive from "./conversations.service";
@@ -25,6 +26,7 @@ const useMockApi = String(import.meta.env.VITE_USE_MOCK_API ?? "true").toLowerCa
 
 export const isMockApiEnabled = useMockApi;
 
+export const agentService = agentLive;
 export const authService = useMockApi ? authMock : authLive;
 export const chatService = useMockApi ? chatMock : chatLive;
 export const conversationsService = useMockApi ? conversationsMock : conversationsLive;
