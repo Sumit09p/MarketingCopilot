@@ -136,6 +136,11 @@ class AgentGuardrailService:
         ] = {
             AgentType.RESEARCH: {
                 IntentType.RESEARCH,
+                IntentType.COMPETITOR_ANALYSIS,
+                IntentType.SEO_ANALYSIS,
+                IntentType.CONTENT_GENERATION,
+                IntentType.ANALYTICS,
+                IntentType.IMAGE_GENERATION,
             },
             AgentType.COMPETITOR: {
                 IntentType.COMPETITOR_ANALYSIS,

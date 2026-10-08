@@ -430,7 +430,27 @@ Return planner decision as JSON only.
 
         payload = json.loads(content)
 
-        return PlannerDecision.model_validate(payload)
+        decision = PlannerDecision.model_validate(payload)
+
+        if selected_agent and decision.status == "READY" and decision.plan:
+            input_map = {
+                "research": ["topic"],
+                "competitor": ["topic"],
+                "seo": ["topic"],
+                "content": ["prompt"],
+                "image": ["prompt"],
+                "analytics": ["data"],
+            }
+
+            required_inputs = input_map.get(selected_agent)
+
+            if required_inputs:
+                decision.plan.tasks = [
+                    task.model_copy(update={"required_inputs": required_inputs})
+                    for task in decision.plan.tasks
+                ]
+
+        return decision
 
     # =============================================================
     # LLM PROMPT

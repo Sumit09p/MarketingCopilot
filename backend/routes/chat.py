@@ -518,26 +518,11 @@ def send_agent_message(
     # 4. Handle failed agent execution
     # -----------------------------------------------------
 
-    orchestration = pipeline_result.get(
-        "orchestration",
-        {}
-    )
+    orchestration = pipeline_result.get("orchestration") or {}
+    final_result = orchestration.get("final_result") or {}
 
-    final_result = orchestration.get(
-        "final_result",
-        {}
-    )
-
-    final_status = final_result.get(
-        "status"
-    )
-
-    final_error = str(
-        final_result.get(
-            "error",
-            ""
-        )
-    )
+    final_status = final_result.get("status")
+    final_error = str(final_result.get("error", ""))
 
     if (
         final_status == "FAILED"
