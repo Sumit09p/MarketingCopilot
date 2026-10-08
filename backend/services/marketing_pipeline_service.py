@@ -379,6 +379,8 @@ class MarketingPipelineService:
         guardrail_result = None
 
         if selected_agent is not None:
+            if isinstance(selected_agent, str):
+                selected_agent = AgentType(selected_agent)
 
             guardrail_result = self.guardrail_service.evaluate(
                 agent=selected_agent,
